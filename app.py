@@ -4,7 +4,7 @@ import re
 from PIL import Image
 from fpdf import FPDF
 
-# Configurazione della pagina Streamlit
+# Configurazione iniziale della pagina di Streamlit
 st.set_page_config(page_title="Estrattore Distinte PC", page_icon="⚽", layout="wide")
 
 def analizza_testo_stampato(testo_grezzo):
@@ -74,11 +74,13 @@ def analizza_testo_stampato(testo_grezzo):
 class PDFReport(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 16)
+        self.set_text_color(31, 41, 55)
         self.cell(0, 10, "REPORT AUTOMATICO DISTINTE", ln=True, align="C")
         self.ln(5)
     def footer(self):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
+        self.set_text_color(156, 163, 175)
         self.cell(0, 10, f"Pagina {self.page_no()}", align="C")
 
 def genera_pdf(dati_squadre):
@@ -133,13 +135,12 @@ with col2:
 if file1 and file2:
     if st.button("🚀 Elabora e Genera PDF", type="primary"):
         risultati = []
-        errore = False
+        errore_rilevato = False
         
         with st.spinner("Lettura digitalizzata dei fogli in corso..."):
             for i, file_caricato in enumerate([file1, file2], 1):
                 try:
                     img = Image.open(file_caricato)
-                    # Converte l'immagine in testo usando il dizionario italiano
                     testo_estratto = pytesseract.image_to_string(img, lang='ita')
                     
                     dati_squadra = analizza_testo_stampato(testo_estratto)
@@ -150,14 +151,17 @@ if file1 and file2:
                     st.success(f"✅ Letta con successo Distinta {i}")
                 except Exception as e:
                     st.error(f"Errore sul file {i}: {e}")
-                    errore = True
+                    errore_rilevato = True
                     
-        if not errore and len(risultati) == 2:
-            pdf_bytes = genera_pdf(risultati)
-            st.write("")
-            st.download_button(
-                label="📥 Scarica il Report PDF della Partita",
-                data=pdf_bytes,
-                file_name="report_partita.pdf",
-                mime="application/pdf"
-              )
+        if not errore_rilevato and len(risultati) == 2:
+            try:
+                pdf_bytes = genera_pdf(risultati)
+                st.write("")
+                st.download_button(
+                    label="📥 Scarica il Report PDF della Partita",
+                    data=pdf_bytes,
+                    file_name="report_partita.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"Errore durante la compilazione del PDF: {e}")
