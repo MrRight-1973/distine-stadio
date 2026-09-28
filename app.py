@@ -12,11 +12,16 @@ st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layou
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #4A5568;'>Carica le foto delle due distinte ufficiali per generare il PDF per il pubblico</p>", unsafe_allow_html=True)
 
-# 1. CARICAMENTO DELLO SPONSOR E DEI FILE
-st.sidebar.header("⚙️ Configurazione")
+# 1. SIDEBAR: CONFIGURAZIONE ED ELEMENTI FISSI
+st.sidebar.header("⚙️ Configurazione Partita")
 sponsor_file = st.sidebar.file_uploader("Carica Logo Sponsor (PNG)", type=["png", "jpg", "jpeg"])
-data_partita = st.sidebar.text_input("Data della partita", "20/09/2026")
+data_partita = st.sidebar.text_input("Data della partita", "28/09/2026")
 campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
+
+st.sidebar.header("⚖️ Terna Arbitrale")
+nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "Rossi di Verona")
+assistente_1 = st.sidebar.text_input("Assistente 1", "Bianchi di Padova")
+assistente_2 = st.sidebar.text_input("Assistente 2", "Verdi di Rovigo")
 
 st.subheader("📸 Carica le immagini delle squadre")
 col1, col2 = st.columns(2)
@@ -32,19 +37,17 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
     if sponsor_bytes:
         from PIL import Image
         img = Image.open(io.BytesIO(sponsor_bytes))
-        # Salva temporaneamente l'immagine per ReportLab
         img.save("temp_sponsor.png")
         canvas.drawImage("temp_sponsor.png", 75, 200, width=450, height=450, mask='auto', preserveAspectRatio=True)
     else:
-        # Scritta di fallback se non carichi un logo
         canvas.setFont('Helvetica-Bold', 40)
         canvas.setFillColor(colors.HexColor("#F2F4F7"))
-        canvas.translate(A4[0]/2, A4[1]/2)
+        canvas.translate(A4/2, A4/2)
         canvas.rotate(35)
         canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
     canvas.restoreState()
 
-# Simulazione OCR basata sui tuoi file reali per il prototipo
+# Mappatura dati reali estratti dai tuoi file di esempio
 def estrai_dati_mock(file_name, is_casa=True):
     if is_casa:
         return "AZZURRA DUECARRARE", [
@@ -65,27 +68,32 @@ def estrai_dati_mock(file_name, is_casa=True):
 # 2. ELABORAZIONE E GENERAZIONE DEL PDF
 if foto_casa and foto_ospite:
     if st.button("🚀 ELABORA E CREA PDF", use_container_width=True):
-        with st.spinner("Lettura delle immagini e generazione PDF in corso..."):
+        with st.spinner("Generazione PDF in corso..."):
             
-            # Estrazione dati
             c_name, c_players, c_coach = estrai_dati_mock(foto_casa.name, is_casa=True)
             o_name, o_players, o_coach = estrai_dati_mock(foto_ospite.name, is_casa=False)
             
-            # Creazione PDF in memoria
             pdf_buffer = io.BytesIO()
             doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
             story = []
             styles = getSampleStyleSheet()
             
-            # Stili grafici del PDF
+            # Stili grafici
             title_style = ParagraphStyle('T', fontSize=22, leading=26, alignment=1, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=4)
-            sub_style = ParagraphStyle('S', fontSize=10, leading=14, alignment=1, textColor=colors.HexColor("#4A5568"), spaceAfter=25)
+            sub_style = ParagraphStyle('S', fontSize=10, leading=14, alignment=1, textColor=colors.HexColor("#4A5568"), spaceAfter=15)
             team_title_style = ParagraphStyle('TT', fontSize=13, leading=16, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=8)
             player_style = ParagraphStyle('P', fontSize=11, leading=15, textColor=colors.HexColor("#2D3748"))
             staff_style = ParagraphStyle('St', fontSize=10, leading=14, textColor=colors.HexColor("#718096"), fontName="Helvetica-Oblique")
+            arbitro_style = ParagraphStyle('Ar', fontSize=9.5, leading=13, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica", spaceAfter=20)
 
             story.append(Paragraph("FORMAZIONI UFFICIALI", title_style))
             story.append(Paragraph(f"{campionato_info} | Data: {data_partita}", sub_style))
+            
+            # Sezione Arbitro e Assistenti sotto il titolo
+            testo_terna = f"<b>Arbitro:</b> Sig. {nome_arbitro}"
+            if assistente_1 or assistente_2:
+                testo_terna += f" | <b>Assistenti:</b> {assistente_1} — {assistente_2}"
+            story.append(Paragraph(testo_terna, arbitro_style))
             
             # Colonna Casa
             box_casa = [Paragraph(c_name, team_title_style), Spacer(1, 4)]
@@ -100,7 +108,7 @@ if foto_casa and foto_ospite:
             box_ospite.append(Paragraph(f"<b>All.</b> {o_coach}", staff_style))
             
             # Tabella affiancata
-            grid = Table([[box_casa, box_ospite]], colWidths=[250, 250])
+            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('RIGHTPADDING', (0,0), (0,0), 12),
@@ -108,10 +116,8 @@ if foto_casa and foto_ospite:
             ]))
             story.append(grid)
             
-            # Leggi lo sponsor se caricato
             s_bytes = sponsor_file.read() if sponsor_file else None
             
-            # Costruzione finale
             doc.build(story, onFirstPage=lambda c, d: draw_background_sponsor(c, d, s_bytes), 
                             onLaterPages=lambda c, d: draw_background_sponsor(c, d, s_bytes))
             
@@ -120,9 +126,8 @@ if foto_casa and foto_ospite:
             
             st.success("✅ PDF Generato con successo!")
             
-            # Bottone di scaricamento per la segreteria
             st.download_button(
-                label="📥 Scarica PDF della Partita",
+                label="📥 Scarica PDF della Partita con Terna Arbitrale",
                 data=pdf_bytes,
                 file_name=f"Formazioni_{data_partita.replace('/', '-')}.pdf",
                 mime="application/pdf",
