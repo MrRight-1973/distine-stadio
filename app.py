@@ -2,7 +2,6 @@ import streamlit as st
 import io
 import qrcode
 import requests
-# Importiamo le funzioni pesanti dal file appena creato
 from estrattore import analizza_distinta, genera_pdf
 
 # 1. Configurazione della pagina Streamlit
@@ -10,6 +9,9 @@ st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="
 
 st.title("⚽ Centro Gestione Distinte Gara")
 st.write("Carica le distinte di entrambe le squadre per generare il PDF unico A4 con QR Code.")
+
+# Recupero controllato della API Key dalle impostazioni di sicurezza di Streamlit
+api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
 # 2. Interfaccia grafica a due colonne per il caricamento file
 col1, col2 = st.columns(2)
@@ -30,59 +32,62 @@ with col2:
 if file_casa and file_ospite:
     st.write("")
     if st.button("⚡ Elabora e Genera PDF con QR Code", type="primary"):
-        with st.spinner("Estrazione dati e creazione PDF in corso..."):
-            try:
-                # Esecuzione delle funzioni importate
-                dati_casa = analizza_distinta(file_casa, "CASA")
-                dati_ospite = analizza_distinta(file_ospite, "OSPITE")
-                
-                pdf_data = genera_pdf(dati_casa, dati_ospite)
-                st.success("🎉 Distinte considerate ed unite con successo!")
-                
-                # Invio al cloud temporaneo file.io per il link corto
-                files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
-                response_cloud = requests.post('https://file.io', files=files)
-                
-                if response_cloud.status_code == 200:
-                    pdf_url = response_cloud.json().get("link")
-                else:
-                    pdf_url = "https://file.io"
-                    st.error("Errore temporaneo nel caricamento del QR Code. Scarica il file dal PC qui sotto.")
+        if not api_key_openai:
+            st.error("🚨 Chiave API non trovata! Inserisci la stringa 'OPENAI_API_KEY' all'interno dei 'Secrets' nel pannello delle impostazioni di Streamlit Cloud.")
+        else:
+            with st.spinner("Estrazione dati e creazione PDF in corso..."):
+                try:
+                    # Passiamo esplicitamente la API Key estratta alla funzione di analisi
+                    dati_casa = analizza_distinta(file_casa, "CASA", api_key_openai)
+                    dati_ospite = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
+                    
+                    pdf_data = genera_pdf(dati_casa, dati_ospite)
+                    st.success("🎉 Distinte elaborate ed unite con successo!")
+                    
+                    # Invio al cloud temporaneo file.io per il link corto
+                    files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
+                    response_cloud = requests.post('https://file.io', files=files)
+                    
+                    if response_cloud.status_code == 200:
+                        pdf_url = response_cloud.json().get("link")
+                    else:
+                        pdf_url = "https://file.io"
+                        st.error("Errore temporaneo nel caricamento del QR Code. Scarica il file dal PC qui sotto.")
 
-                # Layout dei risultati
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("### 📋 Riepilogo Squadre")
-                    st.write(f"**⚽ Gara:** {dati_casa['squadra']} vs {dati_ospite['squadra']}")
-                    st.write(f"**🏠 Allenatore Casa:** {dati_casa['allenatore']}")
-                    st.write(f"**🚀 Allenatore Ospite:** {dati_ospite['allenatore']}")
-                    st.write("")
+                    # Layout dei risultati
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("### 📋 Riepilogo Squadre")
+                        st.write(f"**⚽ Gara:** {dati_casa['squadra']} vs {dati_ospite['squadra']}")
+                        st.write(f"**🏠 Allenatore Casa:** {dati_casa['allenatore']}")
+                        st.write(f"**🚀 Allenatore Ospite:** {dati_ospite['allenatore']}")
+                        st.write("")
+                        
+                        st.download_button(
+                            label="💾 Scarica PDF su questo PC",
+                            data=pdf_data,
+                            file_name="riepilogo_distinte.pdf",
+                            mime="application/pdf"
+                        )
                     
-                    st.download_button(
-                        label="💾 Scarica PDF su questo PC",
-                        data=pdf_data,
-                        file_name="riepilogo_distinte.pdf",
-                        mime="application/pdf"
-                    )
-                
-                with c2:
-                    st.markdown("### 📱 Scarica su Smartphone")
-                    st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
-                    
-                    qr = qrcode.QRCode(
-                        version=None,
-                        error_correction=qrcode.constants.ERROR_CORRECT_L,
-                        box_size=10,
-                        border=4
-                    )
-                    qr.add_data(pdf_url)
-                    qr.make(fit=True)
-                    img_qr = qr.make_image(fill_color="black", back_color="white")
-                    
-                    buf_qr = io.BytesIO()
-                    img_qr.save(buf_qr, format="PNG")
-                    st.image(buf_qr.getvalue(), width=220)
-                    st.caption(f"Link diretto temporaneo: {pdf_url}")
-                    
-            except Exception as e:
-                st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
+                    with c2:
+                        st.markdown("### 📱 Scarica su Smartphone")
+                        st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
+                        
+                        qr = qrcode.QRCode(
+                            version=None,
+                            error_correction=qrcode.constants.ERROR_CORRECT_L,
+                            box_size=10,
+                            border=4
+                        )
+                        qr.add_data(pdf_url)
+                        qr.make(fit=True)
+                        img_qr = qr.make_image(fill_color="black", back_color="white")
+                        
+                        io_buf_qr = io.BytesIO()
+                        img_qr.save(io_buf_qr, format="PNG")
+                        st.image(io_buf_qr.getvalue(), width=220)
+                        st.caption(f"Link diretto temporaneo: {pdf_url}")
+                        
+                except Exception as e:
+                    st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
