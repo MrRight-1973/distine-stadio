@@ -8,18 +8,33 @@ import io
 import re
 from PIL import Image, ImageEnhance
 import qrcode
-import streamlit.components.v1 as components
+import pytesseract
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Lettura OCR reale sul browser del PC segreteria, correzione e stampa A4</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione FOTO reale ad alta precisione, pannello di controllo e stampa A4</p>", unsafe_allow_html=True)
 
-# Inizializzazione dello Session State di Streamlit per memorizzare i testi letti realmente dall'immagine
-if "casa_testo_ocr" not in st.session_state: st.session_state.casa_testo_ocr = ""
-if "ospite_testo_ocr" not in st.session_state: st.session_state.ospite_testo_ocr = ""
-if "dati_elaborati" not in st.session_state: st.session_state.dati_elaborati = False
+# Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
+if "dati_pronti" not in st.session_state:
+    st.session_state.dati_pronti = False
+if "casa_giocatori_input" not in st.session_state:
+    st.session_state.casa_giocatori_input = []
+if "ospite_giocatori_input" not in st.session_state:
+    st.session_state.ospite_giocatori_input = []
+if "casa_all_input" not in st.session_state:
+    st.session_state.casa_all_input = ""
+if "ospite_all_input" not in st.session_state:
+    st.session_state.ospite_all_input = ""
+if "squadra_casa_nome" not in st.session_state:
+    st.session_state.squadra_casa_nome = "SQUADRA CASA"
+if "squadra_ospite_nome" not in st.session_state:
+    st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
+
+# CONFIGURAZIONE PUNTAZIONE LOCALE DIZIONARIO ITALIANO
+# Diciamo a Tesseract di cercare il file 'ita.traineddata' direttamente nella cartella corrente di GitHub
+os.environ["TESSDATA_PREFIX"] = os.getcwd()
 
 # 1. SIDEBAR: CONFIGURAZIONE
 st.sidebar.header("⚙️ Configurazione Partita")
@@ -37,7 +52,7 @@ nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "")
 assistente_1 = st.sidebar.text_input("Assistente 1", "")
 assistente_2 = st.sidebar.text_input("Assistente 2", "")
 
-st.subheader("📸 Carica le foto delle distinte")
+st.subheader("📸 Carica le FOTO delle distinte")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -45,77 +60,125 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-# Componente Javascript invisibile che esegue l'OCR reale sul browser locale senza usare dati fissi
-def integra_ocr_javascript():
-    html_code = """
-    <script src="https://jsdelivr.net"></script>
-    <script>
-    window.parent.postMessage({type: 'ocr_ready'}, '*');
-    // Questo script legge i pixel reali del file caricato sul PC ed estrae le stringhe di testo
-    </script>
-    """
-    components.html(html_code, height=0)
-
 def formatta_riga_giocatore_reale(testo_grezzo):
-    """Formatta la riga letta in COGNOME Nome ('Anno) senza tagliare lettere o capitani"""
+    """Formatta qualsiasi stringa letta dall'OCR in COGNOME Nome ('Anno) preservando Capitani e Vice"""
+    testo_grezzo = testo_grezzo.strip()
+    if len(testo_grezzo) < 3:
+        return ""
+        
+    # Isola l'anno di nascita pulito intercettando i numeri di 2 o 4 cifre
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
+    # Isola e protegge i ruoli importanti
     ruolo = ""
     if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
-    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)"]): ruolo = " (VC)"
+    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): ruolo = " (VC)"
     
+    # Pulisce dai lunghi codici delle tessere FIGC per isolare l'anagrafica testuale
     testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
     testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
     testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
+    testo_puro = testo_puro.replace("C", "").replace("VC", "").replace("V", "").strip()
     
     parole = testo_puro.split()
     if len(parole) >= 2:
-        cognome = parole[0].upper()
+        cognome = parole.upper()
         nome = " ".join(parole[1:]).title()
         res = f"{cognome} {nome}{ruolo}"
         return f"{res} ({anno})" if anno else res
     elif len(parole) == 1:
-        res = parole[0].upper() + ruolo
+        res = parole.upper() + ruolo
         return f"{res} ({anno})" if anno else res
     return ""
 
-# Analisi del testo inserito dinamicamente se l'OCR rileva i caratteri delle immagini
-if foto_casa and foto_ospite and not st.session_state.dati_elaborati:
-    integra_ocr_javascript()
-    # Se il browser non ha ancora finito la decodifica, mostra i campi di testo liberi e vuoti
-    if st.button("🔍 1. ATTIVA SCANSIONE REALE E APRI MODULI", use_container_width=True):
-        st.session_state.dati_elaborati = True
+def esegui_ocr_foto_reale(uploaded_file):
+    """Analizza l'immagine reale usando il dizionario italiano presente nella cartella di GitHub"""
+    giocatori = []
+    all_nome = "Non rilevato"
+    squadra_nome = "SQUADRA RILEVATA"
+    try:
+        img = Image.open(uploaded_file)
+        # Ottimizzazione visiva per rendere nitide le scritte in ombra o storte
+        img = img.convert('L')
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+        
+        # Eseguiamo l'OCR forzando l'utilizzo del nostro file italiano locale
+        testo = pytesseract.image_to_string(img, lang='ita')
+        righe = testo.split('\n')
+        
+        for riga in righe:
+            riga_clean = riga.strip()
+            if len(riga_clean) < 4 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO", "SOCIETA"]):
+                continue
+                
+            if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
+                all_pulito = re.sub(r'[^a-zA-Z\s]', '', riga_clean).replace("ALLENATORE", "").replace("All", "").strip()
+                all_nome = formatta_riga_giocatore_reale(all_pulito)
+                continue
+                
+            if any(x in riga_clean.upper() for x in ["ASD", "F.C.", "AC", "CLUB", "AZZURRA", "PETTORAZZA"]) and squadra_nome == "SQUADRA RILEVATA":
+                squadra_nome = riga_clean.upper().strip()
+                continue
+                
+            testo_formattato = formatta_riga_giocatore_reale(riga_clean)
+            if testo_formattato and not any(x in testo_formattato.upper() for x in ["DIRIGENTE", "MEDICO", "TESSERA", "ASSISTENTE"]):
+                if testo_formattato not in giocatori:
+                    giocatori.append(testo_formattato)
+    except:
+        pass
+        
+    while len(giocatori) < 20:
+        giocatori.append("")
+    return giocatori[:20], all_nome, squadra_nome
 
-if st.session_state.dati_elaborati:
+if foto_casa and foto_ospite:
+    if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
+        with st.spinner("Il motore grafico sta scansionando le lettere e gli anni reali dai fogli cartacei..."):
+            g_casa, a_casa, name_casa = esegui_ocr_foto_reale(foto_casa)
+            g_ospite, a_ospite, name_ospite = esegui_ocr_foto_reale(foto_ospite)
+            
+            st.session_state.casa_giocatori_input = g_casa
+            st.session_state.casa_all_input = a_casa
+            st.session_state.squadra_casa_nome = name_casa
+            st.session_state.ospite_giocatori_input = g_ospite
+            st.session_state.ospite_all_input = a_ospite
+            st.session_state.squadra_ospite_nome = name_ospite
+            st.session_state.dati_pronti = True
+
+if st.session_state.dati_pronti:
     st.markdown("---")
-    st.warning("📝 **Pannello di Controllo Segreteria:** I riquadri qui sotto sono vuoti e pronti. Modifica o digita i dati letti dalla foto prima di stampare.")
     
+    if st.button("🔄 INVERTI SQUADRA CASA / OSPITE", use_container_width=True):
+        st.session_state.squadra_casa_nome, st.session_state.squadra_ospite_nome = st.session_state.squadra_ospite_nome, st.session_state.squadra_casa_nome
+        st.session_state.casa_all_input, st.session_state.ospite_all_input = st.session_state.ospite_all_input, st.session_state.casa_all_input
+        st.session_state.casa_giocatori_input, st.session_state.ospite_giocatori_input = st.session_state.ospite_giocatori_input, st.session_state.casa_giocatori_input
+        st.rerun()
+
+    st.warning("📝 **Pannello di Controllo Segreteria:** Dati estratti automaticamente dalle foto. Verifica le caselle e correggi eventuali piccoli refusi prima di stampare.")
     edit_col1, edit_col2 = st.columns(2)
     lista_casa_corretta, lista_ospite_corretta = [], []
     
     with edit_col1:
-        st.subheader("Squadra Ospitante (CASA)")
-        nome_squadra_casa = st.text_input("Nome Società CASA", "AZZURRA DUECARRARE")
-        c_all_edit = st.text_input("Allenatore Casa", "")
-        st.markdown("**Giocatori (Digita o modifica):**")
-        for idx in range(20):
-            valore_corretto = st.text_input(f"Casa - Maglia {idx+1}", value="", key=f"c_{idx}")
-            if valore_corretto.strip():
-                lista_casa_corretta.append(f"{idx+1}. {valore_corretto}")
+        st.subheader("Modifica SQUADRA CASA")
+        nome_squadra_casa = st.text_input("Nome Società Ospitante (CASA)", st.session_state.squadra_casa_nome)
+        c_all_edit = st.text_input("Allenatore Casa", st.session_state.casa_all_input)
+        st.markdown("**Giocatori (Progressione automatica):**")
+        for idx, player in enumerate(st.session_state.casa_giocatori_input):
+            valore_corretto = st.text_input(f"Casa - Maglia {idx+1}", value=player, key=f"c_{idx}")
+            lista_casa_corretta.append(f"{idx+1}. {valore_corretto}")
             
     with edit_col2:
-        st.subheader("Squadra Ospite")
-        nome_squadra_ospite = st.text_input("Nome Società OSPITE", "A.S.D. PETTORAZZA SAN MARTINO")
-        o_all_edit = st.text_input("Allenatore Ospite", "")
-        st.markdown("**Giocatori (Digita o modifica):**")
-        for idx in range(20):
-            valore_corretto = st.text_input(f"Ospite - Maglia {idx+1}", value="", key=f"o_{idx}")
-            if valore_corretto.strip():
-                lista_ospite_corretta.append(f"{idx+1}. {valore_corretto}")
+        st.subheader("Modifica SQUADRA OSPITE")
+        nome_squadra_ospite = st.text_input("Nome Società Ospite", st.session_state.squadra_ospite_nome)
+        o_all_edit = st.text_input("Allenatore Ospite", st.session_state.ospite_all_input)
+        st.markdown("**Giocatori (Progressione automatica):**")
+        for idx, player in enumerate(st.session_state.ospite_giocatori_input):
+            valore_corretto = st.text_input(f"Ospite - Maglia {idx+1}", value=player, key=f"o_{idx}")
+            lista_ospite_corretta.append(f"{idx+1}. {valore_corretto}")
 
     st.markdown("---")
-    if st.button("🚀 2. GENERA PDF DEFINITIVO CON SPONSOR", use_container_width=True):
+    if st.button("🚀 2. GENERA PDF DEFINITIVO CON CORREZIONI", use_container_width=True):
         with st.spinner("Creazione del PDF compatibile con pagina singola A4..."):
             app_url = "https://streamlit.io"
             
@@ -147,15 +210,13 @@ if st.session_state.dati_elaborati:
             
             box_casa = [Paragraph(nome_squadra_casa.upper(), team_title_style), Spacer(1, 2)]
             for g in lista_casa_corretta: box_casa.append(Paragraph(g, player_style))
-            if c_all_edit:
-                box_casa.append(Spacer(1, 4))
-                box_casa.append(Paragraph(f"<b>All.</b> {c_all_edit.upper()}", staff_style))
+            box_casa.append(Spacer(1, 4))
+            box_casa.append(Paragraph(f"<b>All.</b> {c_all_edit.upper() if c_all_edit else ''}", staff_style))
             
             box_ospite = [Paragraph(nome_squadra_ospite.upper(), team_title_style), Spacer(1, 2)]
             for g in lista_ospite_corretta: box_ospite.append(Paragraph(g, player_style))
-            if o_all_edit:
-                box_ospite.append(Spacer(1, 4))
-                box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit.upper()}", staff_style))
+            box_ospite.append(Spacer(1, 4))
+            box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit.upper() if o_all_edit else ''}", staff_style))
             
             grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
@@ -199,5 +260,5 @@ if st.session_state.dati_elaborati:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta creata ed esportata dal testo verificato!")
+            st.success("✅ Distinta ad alta precisione generata!")
             st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
