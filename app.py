@@ -55,7 +55,7 @@ if file_casa and file_ospite:
                     
                     info_gara = {
                         "campionato": input_campionato if input_campionato else dati_casa.get("campionato", "NON INDICATO"),
-                        "data": input_data if input_data else dati_casa.get("data", "NON INDICAＴA"),
+                        "data": input_data if input_data else dati_casa.get("data", "NON INDICATA"),
                         "arbitro": input_arbitro if input_arbitro else "NON INDICATO",
                         "assistente1": input_assistente1 if input_assistente1 else "NON INDICATO",
                         "assistente2": input_assistente2 if input_assistente2 else "NON INDICATO"
