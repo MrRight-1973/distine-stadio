@@ -58,7 +58,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices.message.content
+    risultato_grezzo = response.choices[0].message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
