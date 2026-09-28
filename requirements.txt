@@ -1,5 +1,5 @@
 streamlit
-easyocr
+google-genai
 pillow
-numpy
+pydantic
 fpdf2
