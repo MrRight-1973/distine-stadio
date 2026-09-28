@@ -90,12 +90,12 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     for i in range(1, 21):
         if i in giocatori_estratti:
             lista_20_giocatori.append({
-                "numero": i,
-                "cognome_nome": giocatori_estratti[i]["cognome_nome"],
-                "anno_nascita": giocatori_estratti[i]["anno_nascita"]
+                "N°": i,
+                "GIOCATORE": giocatori_estratti[i]["cognome_nome"],
+                "ANNO": giocatori_estratti[i]["anno_nascita"]
             })
         else:
-            lista_20_giocatori.append({"numero": i, "cognome_nome": "", "anno_nascita": ""})
+            lista_20_giocatori.append({"N°": i, "GIOCATORE": "", "ANNO": ""})
             
     dati["giocatori"] = lista_20_giocatori
     return dati
@@ -124,7 +124,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[240, 240])
+    t_info = Table(tabella_info_dati, colWidths=[270, 210])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
         ('TOPPADDING', (0,0), (-1,-1), 1.5),
@@ -138,17 +138,17 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             [img_qr_pdf],
             [Paragraph("INQUADRA DA SMARTPHONE", qr_text_style)]
         ]
-        t_blocco_qr = Table(blocco_qr_dati, colWidths=[70])
+        t_blocco_qr = Table(blocco_qr_dati, colWidths=[80])
         t_blocco_qr.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('BOTTOMPADDING', (0,0), (-1,-1), 0),
             ('TOPPADDING', (0,0), (-1,-1), 1),
         ]))
         tabella_header_dati = [[elementi_sinistra, t_blocco_qr]]
-        t_header = Table(tabella_header_dati, colWidths=[480, 70])
+        t_header = Table(tabella_header_dati, colWidths=[470, 80])
     else:
         tabella_header_dati = [[elementi_sinistra, ""]]
-        t_header = Table(tabella_header_dati, colWidths=[480, 70])
+        t_header = Table(tabella_header_dati, colWidths=[470, 80])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -175,9 +175,9 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         ]
         
         for index, g in enumerate(dati.get('giocatori', [])):
-            testo_num = Paragraph(str(g.get('numero', index + 1)), normal_style)
-            testo_nome = Paragraph(pulisci_testo(g.get('cognome_nome', '')), normal_style)
-            testo_anno = Paragraph(str(g.get('anno_nascita', '')), normal_style)
+            testo_num = Paragraph(str(g.get('N°', index + 1)), normal_style)
+            testo_nome = Paragraph(pulisci_testo(g.get('GIOCATORE', '')), normal_style)
+            testo_anno = Paragraph(str(g.get('ANNO', '')), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
             
         t = Table(tabella_dati, colWidths=[25, 195, 45])
