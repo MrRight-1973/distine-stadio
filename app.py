@@ -155,7 +155,11 @@ if file1 and file2:
                     
         if not errore_rilevato and len(risultati) == 2:
             try:
-                pdf_bytes = genera_pdf(risultati)
+                pdf_output = genera_pdf(risultati)
+                
+                # RISOLUZIONE ERRORE: Convertiamo il bytearray in un oggetto bytes standard
+                pdf_bytes = bytes(pdf_output)
+                
                 st.write("")
                 st.download_button(
                     label="📥 Scarica il Report PDF della Partita",
