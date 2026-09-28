@@ -54,7 +54,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {"role": "system", "content": prompt_sistema},
             {
                 "role": "user",
-                "content=[
+                "content": [
                     {"type": "text", "text": f"Estrai l'elenco completo riga per riga per la squadra {ruolo_squadra} in formato json."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
@@ -63,7 +63,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    # CORREZIONE APPLICATA: Aggiunto l'indice [0] per le nuove librerie OpenAI
     risultato_grezzo = response.choices[0].message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
@@ -154,7 +153,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             testo_anno = Paragraph(str(g.get('anno_nascita', '')), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[25, 190, 45])
+        t = Table(tabella_dati, colWidths=[25, 195, 45])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -163,7 +162,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[260, 30, 260])
+    macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
