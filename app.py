@@ -60,74 +60,98 @@ with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
 def formatta_riga_giocatore_reale(testo_grezzo):
-    """Formatta qualsiasi stringa letta dall'OCR in COGNOME Nome ('Anno) preservando Capitani e Vice"""
-    testo_grezzo = testo_grezzo.strip()
-    if len(testo_grezzo) < 3:
-        return ""
-        
+    """Estrattore semantico: separa i blocchi alfabetici ignorando codici numerici e stringhe orizzontali orfane"""
+    # 1. Trova l'anno di nascita (cifra di 2 o 4 cifre isolata)
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
+    # 2. Rileva i ruoli speciali
     ruolo = ""
-    if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
-    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): ruolo = " (VC)"
+    if any(x in testo_grezzo.upper() for x in ["(C)", " C ", "CAPITANO"]): ruolo = " (C)"
+    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " VICE "]): ruolo = " (VC)"
     
-    testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
-    testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
-    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
+    # 3. Pulisce la stringa mantenendo solo lettere e spazi
+    pulito = re.sub(r'[^a-zA-Z\sàèìòù🔍]', ' ', testo_grezzo)
+    parole = [p for p in pulito.split() if len(p) > 1] # Scarta lettere singole orfane dovute a errori OCR
     
-    parole = testo_puro.split()
-    if len(parole) >= 2:
-        cognome = parole[0].upper()
-        nome = " ".join(parole[1:]).title()
-        res = f"{cognome} {nome}{ruolo}"
-        return f"{res} ({anno})" if anno else res
-    elif len(parole) == 1:
-        res = parole[0].upper() + ruolo
-        return f"{res} ({anno})" if anno else res
+    # 4. Strategia di accoppiamento Cognome (Maiuscolo) e Nome (Minuscolo/Misto)
+    cognomi = []
+    nomi = []
+    
+    for p in parole:
+        # Se la parola contiene parole chiave strutturali dei moduli, la saltiamo
+        if p.upper() in ["DIRIGENTE", "MEDICO", "TESSERA", "ASSISTENTE", "ALLENATORE", "ALL", "ASD", "FC", "AC"]:
+            continue
+        # Se è scritta interamente in MAIUSCOLO (e ha più di 2 lettere) è probabilmente un cognome
+        if p.isupper() and len(p) >= 2:
+            cognomi.append(p)
+        else:
+            nomi.append(p.title())
+            
+    # Se non ha trovato una netta separazione maiuscole/minuscole, usa l'ordine standard dei blocchi di testo
+    if not cognomi and len(parole) >= 2:
+        cognomi.append(parole[0].upper())
+        nomi = [p.title() for p in parole[1:]]
+        
+    if cognomi:
+        cognome_finale = " ".join(cognomi)
+        nome_finale = " ".join(nomi) if nomi else ""
+        res = f"{cognome_finale} {nome_finale}".strip()
+        
+        # Aggiunge i metadati trovati
+        res = f"{res}{ruolo}"
+        if anno:
+            res = f"{res} ({anno})"
+        return res
+        
     return ""
 
 def esegui_ocr_foto_reale(uploaded_file):
-    """Analizza l'immagine reale usando il dizionario italiano"""
+    """Analisi con pre-elaborazione dell'immagine mirata a contrastare l'inchiostro sbiadito dei moduli"""
     giocatori = []
-    all_nome = "Non rilevato"
+    all_nome = ""
     squadra_nome = "SQUADRA RILEVATA"
     try:
         img = Image.open(uploaded_file)
         img = img.convert('L')
-        img = ImageEnhance.Contrast(img).enhance(2.0)
+        # Contrasto elevato per separare le scritte a penna/timbro dallo sfondo del foglio
+        img = ImageEnhance.Contrast(img).enhance(2.5)
         
-        testo = pytesseract.image_to_string(img, lang='ita')
+        # Lettura mirata per blocchi di testo strutturati
+        testo = pytesseract.image_to_string(img, lang='ita', config='--psm 6')
         righe = testo.split('\n')
         
         for riga in righe:
             riga_clean = riga.strip()
-            if len(riga_clean) < 4 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO", "SOCIETA"]):
+            if len(riga_clean) < 5 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO", "COMUNICATO", "TABELLONE"]):
                 continue
                 
-            if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
-                all_pulito = re.sub(r'[^a-zA-Z\s]', '', riga_clean).replace("ALLENATORE", "").replace("All", "").strip()
-                all_nome = formatta_riga_giocatore_reale(all_pulito)
+            # Identificazione Allenatore
+            if any(x in riga_clean.upper() for x in ["ALLENATORE", "ALL."]):
+                all_pulito = re.sub(r'(ALLENATORE|ALL\.)', '', riga_clean, flags=re.IGNORECASE)
+                all_nome = formatta_riga_giocatore_reale(all_pulito).replace(" (C)", "").replace(" (VC)", "")
                 continue
                 
-            if any(x in riga_clean.upper() for x in ["ASD", "F.C.", "AC", "CLUB", "AZZURRA", "PETTORAZZA"]) and squadra_nome == "SQUADRA RILEVATA":
-                squadra_nome = riga_clean.upper().strip()
+            # Identificazione Nome Squadra
+            if any(x in riga_clean.upper() for x in ["ASD", "F.C.", "AC", "CLUB", "SOCIETA", "A.S.D."]) and squadra_nome == "SQUADRA RILEVATA":
+                squadra_nome = re.sub(r'[^a-zA-Z\s]', '', riga_clean).upper().strip()
                 continue
                 
             testo_formattato = formatta_riga_giocatore_reale(riga_clean)
-            if testo_formattato and not any(x in testo_formattato.upper() for x in ["DIRIGENTE", "MEDICO", "TESSERA", "ASSISTENTE"]):
+            if testo_formattato and len(testo_formattato.split()[0]) > 1:
                 if testo_formattato not in giocatori:
                     giocatori.append(testo_formattato)
     except:
         pass
         
+    giocatori = [g for g in giocatori if g.strip()]
     while len(giocatori) < 20:
         giocatori.append("")
     return giocatori[:20], all_nome, squadra_nome
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
-        with st.spinner("Il motore grafico sta scansionando le lettere e gli anni reali dai fogli cartacei..."):
+        with st.spinner("Il motore semantico sta analizzando la struttura anagrafica delle foto..."):
             g_casa, a_casa, name_casa = esegui_ocr_foto_reale(foto_casa)
             g_ospite, a_ospite, name_ospite = esegui_ocr_foto_reale(foto_ospite)
             
@@ -138,6 +162,7 @@ if foto_casa and foto_ospite:
             st.session_state.ospite_all_input = a_ospite
             st.session_state.squadra_ospite_nome = name_ospite
             st.session_state.dati_pronti = True
+
 
 if st.session_state.dati_pronti:
     st.markdown("---")
