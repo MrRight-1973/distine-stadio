@@ -5,22 +5,48 @@ import re
 from PIL import Image, ImageEnhance, ImageDraw
 import qrcode
 import pytesseract
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
-# 1. Configurazione grafica della pagina web
+# 1. CONFIGURAZIONE GRAFICA E VARIABILI DI STATO
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
-st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
 
-# 2. Configurazione Session State e Sidebar
+st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione spaziale delle colonne, pannello di verifica e stampa A4 con QR Code</p>", unsafe_allow_html=True)
+
 if "dati_pronti" not in st.session_state:
     st.session_state.dati_pronti = False
 if "casa_giocatori_input" not in st.session_state:
     st.session_state.casa_giocatori_input = [""] * 20
 if "ospite_giocatori_input" not in st.session_state:
     st.session_state.ospite_giocatori_input = [""] * 20
+if "squadra_casa_nome" not in st.session_state:
+    st.session_state.squadra_casa_nome = "SQUADRA CASA"
+if "squadra_ospite_nome" not in st.session_state:
+    st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
 
-# (... Mantieni qui tutti i vari st.sidebar.text_input per arbitri e sponsor ...)
+# Configurazione dizionario italiano Tesseract per server Linux
+os.environ["TESSDATA_PREFIX"] = os.getcwd()
 
-# 3. Creazione delle caselle di caricamento file (FONDAMENTALE PRIMA DEL CONTROLLO)
+# 2. PANNELLO DI CONFIGURAZIONE SIDEBAR
+st.sidebar.header("⚙️ Configurazione Partita")
+data_partita = st.sidebar.text_input("Data della partita", "28/09/2026")
+campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
+
+st.sidebar.header("🏢 Pannello Sponsor (Max 5)")
+sponsor_files = st.sidebar.file_uploader("Carica i loghi degli sponsor (PNG/JPG)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+if sponsor_files and len(sponsor_files) > 5:
+    st.sidebar.error("Carica massimo 5 sponsor.")
+    sponsor_files = sponsor_files[:5]
+
+st.sidebar.header("⚖️ Terna Arbitrale")
+nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "")
+assistente_1 = st.sidebar.text_input("Assistente 1", "")
+assistente_2 = st.sidebar.text_input("Assistente 2", "")
+
+# 3. INTERFACCIA DI CARICAMENTO FOTO UPLODER
 st.subheader("📸 Carica le FOTO delle distinte")
 col1, col2 = st.columns(2)
 
@@ -29,7 +55,7 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-# 4. SOLO ORA puoi inserire il blocco di estrazione geometrica in fondo al file
+# 4. MOTORE DI SCANSIONE ESTRATTORE GEOMETRICO
 if foto_casa and foto_ospite:
     st.markdown("### 🔍 1. Analisi e verifica geometrica delle colonne")
     
@@ -69,6 +95,7 @@ if foto_casa and foto_ospite:
                 if col_nascita_left is None:
                     col_nascita_left, col_nascita_right = int(larghezza_img * 0.58), int(larghezza_img * 0.85)
 
+                # Disegno dei rettangoli di contenimento colonne
                 draw.rectangle([col_nomi_left, 0, col_nomi_right, altezza_img], outline="blue", width=6)
                 draw.rectangle([col_nascita_left, 0, col_nascita_right, altezza_img], outline="green", width=6)
 
@@ -117,11 +144,11 @@ if foto_casa and foto_ospite:
                     
                     parole = stringa_nome.split()
                     if len(parole) >= 2:
-                        cognome = parole.upper()
+                        cognome = parole[0].upper()
                         nome = " ".join(parole[1:]).title()
                         riga_giocatore = f"{cognome} {nome}"
                     else:
-                        riga_giocatore = parole.upper() if parole else ""
+                        riga_giocatore = parole[0].upper() if parole else ""
                         
                     if anno_pulito and riga_giocatore:
                         riga_giocatore += f" ({anno_pulito})"
@@ -143,6 +170,7 @@ if foto_casa and foto_ospite:
             st.success("Estrazione completata!")
             visto_col1, visto_col2 = st.columns(2)
             with visto_col1:
-                st.image(img_visto_casa, caption="Mappa geometrica Squadra Casa", use_container_width=True)
+                st.image(img_visto_casa, caption="Allineamento geometrico CASA (Blu/Verde)", use_container_width=True)
             with visto_col2:
-                st.image(img_visto_ospite, caption="Mappa geometrica Squadra Ospite", use_container_width=True)
+                st.image(img_visto_ospite, caption="Allineamento geometrico OSPITE (Blu/Verde)", use_container_width=True)
+
