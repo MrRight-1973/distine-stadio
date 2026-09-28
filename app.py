@@ -80,14 +80,13 @@ def formatta_stringa_giocatore(testo_grezzo):
         return risultato
     elif len(parole) == 1:
         risultato = parole[0].upper() + ruolo
-        if anno_estratto: risultato += f" ({anno_estratto})"
+        if anno_estratto: resultado += f" ({anno_estratto})"
         return risultato
     return ""
 
 def estrazione_vettoriale_stabile(uploaded_file, is_casa_check=True):
     """Analizza in modo sicuro i flussi di dati e inverte le anagrafiche se i file sono scambiati"""
     fn = uploaded_file.name.lower()
-    # Verifica l'appartenenza reale del file basandosi sul nome del file inserito
     appartiene_a_casa = any(x in fn for x in ["casa", "azzurra", "duecarrare", "5w4bdc"])
     
     if (is_casa_check and appartiene_a_casa) or (not is_casa_check and not appartiene_a_casa):
@@ -200,7 +199,8 @@ if st.session_state.dati_pronti:
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=)
+            # RISOLTO: Inserite le misure fisse simmetriche all'interno della tupla
+            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
             story.append(grid)
             story.append(Spacer(1, 8))
