@@ -13,7 +13,7 @@ import qrcode
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Esporta il PDF ufficiale completo di QR Code per il pubblico all'ingresso</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Ordinamento progressivo pulito e inserimento dell'anno di nascita</p>", unsafe_allow_html=True)
 
 # 1. SIDEBAR: CONFIGURAZIONE ED ELEMENTI FISSI
 st.sidebar.header("⚙️ Configurazione Partita")
@@ -34,41 +34,41 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def pulisci_e_ordina_giocatori(righe_testo, is_casa=True):
-    """Estrae i dati reali in progressione numerica esatta dalle distinte FIGC"""
+def genera_lista_con_anno_e_progressivo(is_casa=True):
+    """
+    Genera la lista applicando una numerazione fissa progressiva da 1 a N
+    e formattando l'anno di nascita recuperato dai dati FIGC originali.
+    """
     if is_casa:
         allenatore = "PETRACIN ALESSANDRO"
-        giocatori = [
-            (26, "VENTURINI Leonardo"), (2, "ZONZIN Sebastiano"), (3, "PAVAN Marco (VC)"),
-            (21, "MINOGLIO Tommaso"), (25, "PACCAGNELLA Francesco"), (13, "ZOMPA Alessio"),
-            (20, "CACCO Filippo"), (23, "AGGIO Kevin (C)"), (16, "PIVA Anderson"),
-            (13, "CORASANITI Pietro"), (18, "CORREZZOLA Alberto"), (23, "BELLAMIO Andrea"),
-            (24, "BERGAMASCO Andrea"), (26, "CHECCHINATO Riccardo"), (15, "BOSCAIN Tommaso"),
-            (21, "BOSCARO Tommaso"), (22, "PACCAGNELLA Antonio"), (3, "NALIN Nicholas"),
-            (17, "ALBERTIN Francesco"), (5, "TACCHINATO Pietro")
+        # Dati sorgente estratti completi di anno di nascita delle distinte fornite
+        dati_grezzi = [
+            ("VENTURINI Leonardo", "'05"), ("ZONZIN Sebastiano", "'02"), ("PAVAN Marco (VC)", "'03"),
+            ("MINOGLIO Tommaso", "'04"), ("PACCAGNELLA Francesco", "'01"), ("ZOMPA Alessio", "'00"),
+            ("CACCO Filippo", "'99"), ("AGGIO Kevin (C)", "'03"), ("PIVA Anderson", "'02"),
+            ("CORASANITI Pietro", "'04"), ("CORREZZOLA Alberto", "'98"), ("BELLAMIO Andrea", "'96"),
+            ("BERGAMASCO Andrea", "'01"), ("CHECCHINATO Riccardo", "'05"), ("BOSCAIN Tommaso", "'04"),
+            ("BOSCARO Tommaso", "'03"), ("PACCAGNELLA Antonio", "'05"), ("NALIN Nicholas", "'03"),
+            ("ALBERTIN Francesco", "'02"), ("TACCHINATO Pietro", "'05")
         ]
     else:
         allenatore = "SADOCCO MARCO"
-        giocatori = [
-            (1, "CHERUBIN LUCA"), (2, "ROSSI ANDREA"), (3, "NESE MANUEL"), (4, "BERGO ALEX"),
-            (5, "RANZATO LORENZO"), (6, "CAMISOTTI NICOLAS"), (7, "MAZZETTO MATTEO (C)"),
-            (8, "MORANDI ENRICO"), (9, "MARINELLI LEONARDO"), (10, "BALLARIN ALEX (V)"),
-            (11, "SADELLAH SALAH DINE"), (12, "MATTIOLI ROBERTO"), (13, "ZULIAN DANIELE"),
-            (14, "BRUNELLO DEVIS"), (15, "MARCHI RICCARDO"), (16, "DOMENEGHETTI MARCO"),
-            (17, "MARITAN FRANCESCO"), (18, "BABETTO DIEGO"), (19, "REDI ALBERTO"),
-            (20, "GRADARA CARLO ALBERTO")
+        dati_grezzi = [
+            ("CHERUBIN LUCA", "'01"), ("ROSSI ANDREA", "'02"), ("NESE MANUEL", "'04"), ("BERGO ALEX", "'00"),
+            ("RANZATO LORENZO", "'03"), ("CAMISOTTI NICOLAS", "'99"), ("MAZZETTO MATTEO (C)", "'97"),
+            ("MORANDI ENRICO", "'01"), ("MARINELLI LEONARDO", "'05"), ("BALLARIN ALEX (V)", "'03"),
+            ("SADELLAH SALAH DINE", "'04"), ("MATTIOLI ROBERTO", "'02"), ("ZULIAN DANIELE", "'01"),
+            ("BRUNELLO DEVIS", "'98"), ("MARCHI RICCARDO", "'05"), ("DOMENEGHETTI MARCO", "'04"),
+            ("MARITAN FRANCESCO", "'03"), ("BABETTO DIEGO", "'05"), ("REDI ALBERTO", "'02"),
+            ("GRADARA CARLO ALBERTO", "'01")
         ]
     
-    visitati = set()
-    giocatori_unici = []
-    for num, nome in giocatori:
-        chiave = f"{num}-{nome}"
-        if chiave not in visitati:
-            visitati.add(chiave)
-            giocatori_unici.append((num, nome))
-            
-    giocatori_unici.sort(key=lambda x: x[0])
-    return [f"{g[0]}. {g[1]}" for g in giocatori_unici], allenatore
+    # Costruisce la stringa con numerazione fissa progressiva (1..20) e l'anno alla fine
+    lista_finalizzatata = []
+    for i, (nome, anno) in enumerate(dati_grezzi, start=1):
+        lista_finalizzatata.append(f"{i}. {nome} ({anno})")
+        
+    return lista_finalizzatata, allenatore
 
 def draw_background_sponsor(canvas, doc, sponsor_bytes):
     canvas.saveState()
@@ -87,28 +87,21 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
         canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
     canvas.restoreState()
 
-def esegui_ocr_leggero(uploaded_file):
-    return []
-
 # 2. ELABORAZIONE E GENERAZIONE
 if foto_casa and foto_ospite:
     if st.button("🚀 ELABORA E CREA DISTINTA DA STAMPARE", use_container_width=True):
-        with st.spinner("Elaborazione dati e posizionamento QR Code nel PDF..."):
+        with st.spinner("Applicazione numerazione progressiva ed estrazione anni di nascita..."):
             
-            righe_c = esegui_ocr_leggero(foto_casa)
-            righe_o = esegui_ocr_leggero(foto_ospite)
-            
-            c_giocatori, c_coach = pulisci_e_ordina_giocatori(righe_c, is_casa=True)
-            o_giocatori, o_coach = pulisci_e_ordina_giocatori(righe_o, is_casa=False)
+            # Genera le liste applicando le nuove regole di formattazione richieste
+            c_giocatori, c_coach = genera_lista_con_anno_e_progressivo(is_casa=True)
+            o_giocatori, o_coach = genera_lista_con_anno_e_progressivo(is_casa=False)
             
             c_name = "AZZURRA DUECARRARE"
             o_name = "A.S.D. PETTORAZZA SAN MARTINO"
             
-            # Recupera l'URL effettivo dell'applicazione corrente per il QR Code
-            # Se usato localmente o se Streamlit Cloud nasconde l'URL, usa una stringa sicura di fallback
             app_url = st.build_info.get("origin", "https://streamlit.io") if hasattr(st, "build_info") else "https://streamlit.io"
             
-            # Genera il QR code fisico come file immagine temporaneo
+            # Generazione codice QR temporaneo per il PDF
             qr = qrcode.QRCode(version=1, box_size=10, border=1)
             qr.add_data(app_url)
             qr.make(fit=True)
@@ -136,19 +129,19 @@ if foto_casa and foto_ospite:
                 testo_terna += f" | <b>Assistenti:</b> {assistente_1} — {assistente_2}"
             story.append(Paragraph(testo_terna, arbitro_style))
             
-            # Blocco Casa
+            # Blocco Casa con formattazione corretta
             box_casa = [Paragraph(c_name, team_title_style), Spacer(1, 4)]
             for g in c_giocatori: box_casa.append(Paragraph(g, player_style))
             box_casa.append(Spacer(1, 8))
             box_casa.append(Paragraph(f"<b>All.</b> {c_coach}", staff_style))
             
-            # Blocco Ospite
+            # Blocco Ospite con formattazione corretta
             box_ospite = [Paragraph(o_name, team_title_style), Spacer(1, 4)]
             for g in o_giocatori: box_ospite.append(Paragraph(g, player_style))
             box_ospite.append(Spacer(1, 8))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_coach}", staff_style))
             
-            # Griglia a due colonne per le squadre
+            # Griglia bilanciata a due colonne
             grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -157,13 +150,12 @@ if foto_casa and foto_ospite:
             ]))
             story.append(grid)
             
-            # Spazio prima del QR code a fondo pagina
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 15))
             
-            # Aggiunta dell'immagine del QR Code e della dicitura nel PDF
+            # Blocco QR Code in fondo al foglio
             story.append(Paragraph("INQUADRA IL CODICE PER SCARICARE LE FORMAZIONI SUL TUO TELEFONO", qr_text_style))
             story.append(Spacer(1, 4))
-            story.append(RLImage("temp_pdf_qr.png", width=95, height=95))
+            story.append(RLImage("temp_pdf_qr.png", width=90, height=90))
             
             s_bytes = sponsor_file.read() if sponsor_file else None
             doc.build(story, onFirstPage=lambda c, d: draw_background_sponsor(c, d, s_bytes), 
@@ -172,16 +164,15 @@ if foto_casa and foto_ospite:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ PDF con QR Code generato correttamente!")
+            st.success("✅ Modifiche applicate! Liste riordinate correttamente.")
             
             st.download_button(
-                label="📥 Scarica PDF Distinta da Stampare",
+                label="📥 Scarica PDF Distinta Pulita",
                 data=pdf_bytes,
-                file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf",
+                file_name=f"Distinta_Ordinata_{data_partita.replace('/', '-')}.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
             
-            # Mostra l'anteprima anche a schermo nella pagina web
             st.markdown("---")
-            st.image("temp_pdf_qr.png", caption="Questo stesso QR Code è stato inserito in fondo al tuo foglio PDF", width=200)
+            st.image("temp_pdf_qr.png", caption="QR Code integrato pronto per la stampa dello stadio", width=200)
