@@ -2,6 +2,7 @@ import streamlit as st
 import io
 import qrcode
 import requests
+import base64
 from estrattore import analizza_distinta, genera_pdf
 
 # 1. Configurazione della pagina Streamlit
@@ -10,7 +11,6 @@ st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="
 st.title("⚽ Centro Gestione Distinte Gara")
 st.write("Carica le distinte di entrambe le squadre per generare il PDF unico A4 con QR Code.")
 
-# Recupero controllato della API Key dalle impostazioni di sicurezza di Streamlit
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
 # 2. Interfaccia grafica a due colonne per il caricamento file
@@ -33,26 +33,32 @@ if file_casa and file_ospite:
     st.write("")
     if st.button("⚡ Elabora e Genera PDF con QR Code", type="primary"):
         if not api_key_openai:
-            st.error("🚨 Chiave API non trovata! Inserisci la stringa 'OPENAI_API_KEY' all'interno dei 'Secrets' nel pannello delle impostazioni di Streamlit Cloud.")
+            st.error("🚨 Chiave API non trovata! Inserisci la stringa 'OPENAI_API_KEY' nei 'Secrets' di Streamlit Cloud.")
         else:
             with st.spinner("Estrazione dati e creazione PDF in corso..."):
                 try:
-                    # Passiamo esplicitamente la API Key estratta alla funzione di analisi
                     dati_casa = analizza_distinta(file_casa, "CASA", api_key_openai)
                     dati_ospite = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
                     pdf_data = genera_pdf(dati_casa, dati_ospite)
                     st.success("🎉 Distinte elaborate ed unite con successo!")
                     
-                    # Invio al cloud temporaneo file.io per il link corto
-                    files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
-                    response_cloud = requests.post('https://file.io', files=files)
-                    
-                    if response_cloud.status_code == 200:
-                        pdf_url = response_cloud.json().get("link")
-                    else:
-                        pdf_url = "https://file.io"
-                        st.error("Errore temporaneo nel caricamento del QR Code. Scarica il file dal PC qui sotto.")
+                    # --- SISTEMA ANTIBLOCK PER IL CARICAMENTO CLOUD ---
+                    pdf_url = None
+                    try:
+                        files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
+                        response_cloud = requests.post('https://file.io', files=files, timeout=5)
+                        if response_cloud.status_code == 200:
+                            pdf_url = response_cloud.json().get("link")
+                    except Exception:
+                        # Se il cloud fallisce, andiamo in modalità protezione senza bloccare l'app
+                        pdf_url = None
+
+                    # Se il cloud non ha risposto, convertiamo il file in link locale incorporato (Failsafe)
+                    if not pdf_url:
+                        b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+                        pdf_url = f"data:application/pdf;base64,{b64_pdf}"
+                        st.info("💡 Nota: Generazione QR Code eseguita in modalità locale senza server esterni.")
 
                     # Layout dei risultati
                     c1, c2 = st.columns(2)
@@ -74,6 +80,7 @@ if file_casa and file_ospite:
                         st.markdown("### 📱 Scarica su Smartphone")
                         st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
                         
+                        # Se usiamo il file URI incorporato, serve la versione automatica per file densi
                         qr = qrcode.QRCode(
                             version=None,
                             error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -87,7 +94,9 @@ if file_casa and file_ospite:
                         io_buf_qr = io.BytesIO()
                         img_qr.save(io_buf_qr, format="PNG")
                         st.image(io_buf_qr.getvalue(), width=220)
-                        st.caption(f"Link diretto temporaneo: {pdf_url}")
+                        
+                        if not pdf_url.startswith("data:"):
+                            st.caption(f"Link diretto temporaneo: {pdf_url}")
                         
                 except Exception as e:
                     st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
