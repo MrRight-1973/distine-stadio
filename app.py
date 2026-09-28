@@ -14,7 +14,7 @@ from reportlab.lib import colors
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione spaziale basata su colonna numerica progressiva 1-20</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione spaziale limitata rigorosamente alla fascia verticale dei numeri 1-20</p>", unsafe_allow_html=True)
 
 if "dati_pronti" not in st.session_state:
     st.session_state.dati_pronti = False
@@ -55,12 +55,12 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-# 4. MOTORE DI SCANSIONE AD ANCORAGGIO NUMERICO
+# 4. MOTORE DI SCANSIONE AD ANCORAGGIO E RITAGLIO VERTICALE MIRATO
 if foto_casa and foto_ospite:
     st.markdown("### 🔍 1. Analisi Geometrica e Allineamento sui Numeri di Riga")
     
     if st.button("🚀 AVVIA ESTRAZIONE PURA DALLE FOTO", use_container_width=True):
-        with st.spinner("Allineamento sui numeri guida 1-20 ed estrazione anagrafica..."):
+        with st.spinner("Isolamento della fascia verticale 1-20 ed estrazione nomi..."):
             
             def analizza_e_disegna_squadra(uploaded_file, etichetta_squadra):
                 img_originale = Image.open(uploaded_file)
@@ -71,44 +71,45 @@ if foto_casa and foto_ospite:
                 img_ocr = img_originale.convert('L')
                 img_ocr = ImageEnhance.Contrast(img_ocr).enhance(3.0)
                 
-                # Usiamo image_to_data per trovare la posizione di ogni singola parola/numero
                 dati_ocr = pytesseract.image_to_data(img_ocr, lang='ita', config='--psm 6', output_type=pytesseract.Output.DICT)
                 n_elementi = len(dati_ocr['text'])
                 
-                # FASE 1: Individuazione della coordinata X media dei numeri progressivi da 1 a 20
                 x_numeri = []
-                mappa_y_numeri = {} # Associa il numero letto alla sua altezza Y
+                y_numeri = []
+                mappa_y_numeri = {}
                 
+                # FASE 1: Trova i confini geometrici (Min Y e Max Y) della sola colonna 1-20
                 for i in range(n_elementi):
                     testo = str(dati_ocr['text'][i]).strip()
-                    # Controlla se la parola è un numero puro compreso tra 1 e 20
                     if testo.isdigit():
                         num = int(testo)
                         if 1 <= num <= 20:
                             x_pos = dati_ocr['left'][i]
                             y_pos = dati_ocr['top'][i]
-                            # Filtro per escludere numeri sparsi a destra (es. anni o tessere)
+                            
+                            # Filtro standard per escludere numeri sparsi nella metà destra del foglio
                             if x_pos < larghezza_img * 0.30: 
                                 x_numeri.append(x_pos)
+                                y_numeri.append(y_pos)
                                 mappa_y_numeri[y_pos] = num
 
-                # Determina l'asse X della colonna numerica
-                if x_numeri:
-                    coordinata_x_ancora = int(sum(x_numeri) / len(x_numeri))
-                else:
-                    # Fallback geometrico se non legge i numeri impressi
-                    coordinata_x_ancora = int(larghezza_img * 0.08)
+                # Definizione dei limiti della colonna numerica
+                coordinata_x_ancora = int(sum(x_numeri) / len(x_numeri)) if x_numeri else int(larghezza_img * 0.08)
                 
-                # Calcola l'area della colonna BLU dei Nomi partendo subito a destra dell'ancora numerica
-                col_nomi_left = coordinata_x_ancora + 25   # Salta lo spazio del numero e del trattino
-                col_nomi_right = col_nomi_left + 450       # Larghezza utile per contenere COGNOME Nome
+                # CORREZIONE FOCALIZZATA: L'area verticale inizia dal primo numero trovato e finisce all'ultimo
+                limite_verticale_top = min(y_numeri) if y_numeri else int(altezza_img * 0.20)
+                limite_verticale_bottom = max(y_numeri) + 40 if y_numeri else int(altezza_img * 0.85)
                 
-                # Disegna l'area BLU focalizzata sui nomi
-                draw.rectangle([col_nomi_left, 0, col_nomi_right, altezza_img], outline="blue", width=6)
+                # Calcolo dell'area orizzontale a destra del settore numerico
+                col_nomi_left = coordinata_x_ancora + 25
+                col_nomi_right = col_nomi_left + 450
                 
-                # FASE 2: Raggruppamento dei frammenti di testo allineati sulle Y dei numeri guida
+                # Disegna il riquadro BLU focalizzato: parte dall'altezza dell'1 e si ferma all'altezza del 20
+                draw.rectangle([col_nomi_left, limite_verticale_top, col_nomi_right, limite_verticale_bottom], outline="blue", width=6)
+                
+                # FASE 2: Raggruppamento parole filtrate per la sola area ritagliata
                 giocatori_per_indice = {i: [] for i in range(1, 21)}
-                tolleranza_y = 15 # Pixel di tolleranza per scritte leggermente ondulate
+                tolleranza_y = 15
                 
                 for i in range(n_elementi):
                     testo_parola = str(dati_ocr['text'][i]).strip()
@@ -122,22 +123,20 @@ if foto_casa and foto_ospite:
                     w = dati_ocr['width'][i]
                     h = dati_ocr['height'][i]
                     
-                    # Se la parola cade dentro l'area BLU dei Nomi
-                    if col_nomi_left <= x <= col_nomi_right:
+                    # Criterio di inclusione: deve essere dentro le X della colonna nomi E dentro le Y dei numeri 1-20
+                    if (col_nomi_left <= x <= col_nomi_right) and (limite_verticale_top <= y <= limite_verticale_bottom):
                         draw.rectangle([x, y, x + w, y + h], outline="red", width=2)
                         
-                        # Associa la parola alla riga del rispettivo numero da 1 a 20
                         for y_num, num_riga in mappa_y_numeri.items():
                             if abs(y_num - y) <= tolleranza_y:
                                 if not any(z in testo_parola.upper() for z in ["COGNOME", "NOME", "ALLENATORE", "DISTINTA"]):
                                     giocatori_per_indice[num_riga].append(testo_parola)
                                 break
 
-                # FASE 3: Formattazione ordinata dei 20 slot richiesti
+                # FASE 3: Formattazione dei nomi estratti
                 giocatori_finali = []
                 for idx in range(1, 21):
                     stringa_nome = " ".join(giocatori_per_indice[idx]).strip()
-                    # Rimuove caratteri speciali spuri o simboli rimasti dall'OCR
                     stringa_nome = re.sub(r'[^a-zA-Z\sàèìòù🔍]', '', stringa_nome).strip()
                     
                     parole = stringa_nome.split()
@@ -162,6 +161,6 @@ if foto_casa and foto_ospite:
             st.success("Estrazione focalizzata completata!")
             visto_col1, visto_col2 = st.columns(2)
             with visto_col1:
-                st.image(img_visto_casa, caption="Area Nomi agganciata alla sequenza 1-20 (CASA)", use_container_width=True)
+                st.image(img_visto_casa, caption="Area Nomi circoscritta alla fascia 1-20 (CASA)", use_container_width=True)
             with visto_col2:
-                st.image(img_visto_ospite, caption="Area Nomi agganciata alla sequenza 1-20 (OSPITE)", use_container_width=True)
+                st.image(img_visto_ospite, caption="Area Nomi circoscritta alla fascia 1-20 (OSPITE)", use_container_width=True)
