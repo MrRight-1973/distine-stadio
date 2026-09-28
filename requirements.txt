@@ -2,5 +2,4 @@ streamlit
 reportlab
 pillow
 qrcode
-requests
 
