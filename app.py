@@ -33,10 +33,6 @@ with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
 def pulisci_e_ordina_giocatori(righe_testo):
-    """
-    Analizza il testo estratto dall'immagine, trova i giocatori con il loro numero,
-    li ordina in progressione numerica corretta ed estrae l'allenatore.
-    """
     giocatori = []
     allenatore = "Non specificato"
     
@@ -45,22 +41,17 @@ def pulisci_e_ordina_giocatori(righe_testo):
         if not riga_clean:
             continue
         
-        # Cerca la riga dell'allenatore
         if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
             allenatore = riga_clean.replace("ALLENATORE:", "").replace("All.", "").strip()
             continue
             
-        # Trova moduli del tipo: "23. AGGIO Kevin" o "1 CHERUBIN LUCA"
         match = re.match(r'^(\d+)[\s\.\-]*+(.+)$', riga_clean)
         if match:
             num = int(match.group(1))
             nome = match.group(2).strip()
             giocatori.append((num, nome))
             
-    # Ordina i giocatori per progressione numerica di maglia crescete
     giocatori.sort(key=lambda x: x[0])
-    
-    # Riformatta come stringa leggibile per il PDF
     lista_formattata = [f"{g[0]}. {g[1]}" for g in giocatori]
     return lista_formattata, allenatore
 
@@ -70,10 +61,8 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
         from PIL import Image
         img = Image.open(io.BytesIO(sponsor_bytes))
         img.save("temp_sponsor.png")
-        # A4[0] è la larghezza, A4[1] è l'altezza
         canvas.drawImage("temp_sponsor.png", 75, 200, width=450, height=450, mask='auto', preserveAspectRatio=True)
     else:
-        # Correzione qui: usiamo l'indice corretto per larghezza e altezza della tupla A4
         canvas.setFont('Helvetica-Bold', 40)
         canvas.setFillColor(colors.HexColor("#F2F4F7"))
         canvas.translate(A4[0]/2, A4[1]/2)
@@ -81,11 +70,8 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
         canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
     canvas.restoreState()
 
-
-# Lettore di testo integrato gratuito
 def esegui_ocr_immagine(uploaded_file):
     try:
-        bytes_data = uploaded_file.getvalue()
         if "casa" in uploaded_file.name.lower() or "azzurra" in uploaded_file.name.lower():
             return ["26 VENTURINI Leonardo", "2 ZONZIN Sebastiano", "3 PAVAN Marco (VC)", "21 MINOGLIO Tommaso", "23 AGGIO Kevin (C)", "ALLENATORE: PETRACIN ALESSANDRO"]
         else:
@@ -137,7 +123,7 @@ if foto_casa and foto_ospite:
             box_ospite.append(Spacer(1, 10))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_coach}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=[250, 250])
+            grid = Table([[box_casa, box_ospite]], colWidths=[240, 240])
             grid.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('RIGHTPADDING', (0,0), (0,0), 12),
@@ -162,10 +148,10 @@ if foto_casa and foto_ospite:
                 use_container_width=True
             )
             
-            # 3. MOSTRA IL QR CODE SULLO SCHERMO PER IL PUBBLICO
+            # 3. MOSTRA IL QR CODE SULLO SCHERMO
             st.markdown("---")
             st.subheader("📲 QR Code per il pubblico in tempo reale")
-            st.info("Fai inquadrare questo QR code dal pubblico presente in segreteria per visualizzare immediatamente la pagina.")
+            st.info("Fai inquadrare questo QR code dal pubblico presente in segreteria per far scaricare la distinta.")
             
             import qrcode
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
