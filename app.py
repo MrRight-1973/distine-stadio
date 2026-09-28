@@ -70,14 +70,17 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
         from PIL import Image
         img = Image.open(io.BytesIO(sponsor_bytes))
         img.save("temp_sponsor.png")
+        # A4[0] è la larghezza, A4[1] è l'altezza
         canvas.drawImage("temp_sponsor.png", 75, 200, width=450, height=450, mask='auto', preserveAspectRatio=True)
     else:
+        # Correzione qui: usiamo l'indice corretto per larghezza e altezza della tupla A4
         canvas.setFont('Helvetica-Bold', 40)
         canvas.setFillColor(colors.HexColor("#F2F4F7"))
-        canvas.translate(A4/2, A4/2)
+        canvas.translate(A4[0]/2, A4[1]/2)
         canvas.rotate(35)
         canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
     canvas.restoreState()
+
 
 # Lettore di testo integrato gratuito
 def esegui_ocr_immagine(uploaded_file):
