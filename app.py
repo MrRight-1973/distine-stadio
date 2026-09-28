@@ -43,7 +43,7 @@ if file_casa and file_ospite:
                     pdf_data = genera_pdf(dati_casa, dati_ospite)
                     st.success("🎉 Distinte elaborate ed unite con successo!")
                     
-                    # --- SISTEMA ANTIBLOCK PER IL CARICAMENTO CLOUD ---
+                    # Caricamento cloud con gestione errori integrata
                     pdf_url = None
                     try:
                         files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
@@ -51,10 +51,9 @@ if file_casa and file_ospite:
                         if response_cloud.status_code == 200:
                             pdf_url = response_cloud.json().get("link")
                     except Exception:
-                        # Se il cloud fallisce, andiamo in modalità protezione senza bloccare l'app
                         pdf_url = None
 
-                    # Se il cloud non ha risposto, convertiamo il file in link locale incorporato (Failsafe)
+                    # Failsafe locale se file.io non risponde
                     if not pdf_url:
                         b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
                         pdf_url = f"data:application/pdf;base64,{b64_pdf}"
@@ -80,7 +79,6 @@ if file_casa and file_ospite:
                         st.markdown("### 📱 Scarica su Smartphone")
                         st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
                         
-                        # Se usiamo il file URI incorporato, serve la versione automatica per file densi
                         qr = qrcode.QRCode(
                             version=None,
                             error_correction=qrcode.constants.ERROR_CORRECT_L,
