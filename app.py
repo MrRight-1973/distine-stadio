@@ -163,32 +163,36 @@ if "dati_mappati" in st.session_state:
                 # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
                 pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 2. Carica il PDF online tramite filebin.net (Server ultra-stabile e simultaneo)
-                url_pubblico = "https://google.com" # Fallback globale
+                # 2. Carica il PDF online tramite catbox.moe (Server ultra-stabile per sviluppatori)
+                url_pubblico = "https://google.com" # Fallback globale di sicurezza
                 caricato_con_successo = False
                 
                 try:
-                    import random
-                    id_partita = f"distinta_{info_gara_corrette['data'].replace('/', '_')}_{random.randint(1000, 9999)}".lower()
+                    # Configurazione parametri per l'API di Catbox
+                    # l'operazione 'fileupload' carica il file in modo anonimo e restituisce l'URL diretto
+                    payload_catbox = {
+                        'reqtype': 'fileupload',
+                        'userhash': '' # Lasciare vuoto per upload anonimo
+                    }
+                    
                     nome_file = f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf"
+                    files_catbox = {
+                        'fileToUpload': (nome_file, pdf_bozza, 'application/pdf')
+                    }
                     
-                    # RISOLUZIONE DEFINITIVA: Stringa divisa con slash esplicito senza ambiguità di formattazione
-                    base_url = "https://filebin.net"
-                    upload_url = base_url + "/" + id_partita + "/" + nome_file
+                    # Invio della richiesta POST standard
+                    response_upload = requests.post("https://catbox.moe", data=payload_catbox, files=files_catbox, timeout=12)
                     
-                    # Inviamo i byte crudi del PDF tramite richiesta PUT
-                    headers = {"Content-Type": "application/pdf"}
-                    response_upload = requests.put(upload_url, data=pdf_bozza, headers=headers, timeout=10)
-                    
-                    if response_upload.status_code == 200 or response_upload.status_code == 201:
-                        # L'URL di download diretto per gli spettatori sarà questo:
-                        url_pubblico = base_url + "/" + id_partita + "/" + nome_file
+                    if response_upload.status_code == 200 and response_upload.text.startswith("https://"):
+                        # Catbox restituisce DIRETTAMENTE l'URL finale del file come semplice testo pulito
+                        url_pubblico = response_upload.text.strip()
                         caricato_con_successo = True
                     else:
-                        st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Tento fallback rapido...")
+                        st.warning(f"Il server primario ha risposto in modo inatteso. Tento riserva...")
+                        # Secondo tentativo su ix.io se catbox dovesse fallire
                         payload_ix = {'f:1': pdf_bozza}
                         response_ix = requests.post("http://ix.io", data=payload_ix, timeout=8)
-                        if response_ix.status_code == 200:
+                        if response_ix.status_code == 200 and response_ix.text.strip().startswith("http"):
                             url_pubblico = response_ix.text.strip()
                             caricato_con_successo = True
                             
