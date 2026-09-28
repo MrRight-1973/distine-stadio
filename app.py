@@ -60,6 +60,8 @@ if "dati_mappati" in st.session_state:
         edit_ass2 = st.text_input("🚩 Assistente 2", value="")
         
     st.markdown("---")
+    
+    # Griglia principale per le due squadre
     c_sq1, c_sq2 = st.columns(2)
     
     opzioni_righe = [i for i in range(1, 21)]
@@ -68,34 +70,35 @@ if "dati_mappati" in st.session_state:
     with c_sq1:
         st.subheader("🏠 SQUADRA CASA")
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
-        edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
+        edit_all_casa = text_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
         st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
         
-        riga_scelta_casa = st.selectbox("🎯 Seleziona N° riga su cui operare (Casa)", options=opzioni_righe, index=12)
-        c_btn1, c_btn2 = st.columns(2)
-        with c_btn1:
-            if st.button("⬇️ Slitta in basso (Casa)", key="shift_down_casa", use_container_width=True):
-                df = st.session_state["griglia_casa"].copy().reset_index()
-                idx = riga_scelta_casa - 1
-                nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx:19]
-                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                st.rerun()
-        with c_btn2:
-            if st.button("⬆️ Slitta in alto (Casa)", key="shift_up_casa", use_container_width=True):
-                df = st.session_state["griglia_casa"].copy().reset_index()
-                idx = riga_scelta_casa - 1
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                st.rerun()
+        # Sotto-griglia bilanciata per i controlli Casa
+        c_ctrl_c1, c_ctrl_c2 = st.columns([1, 1])
+        with c_ctrl_c1:
+            riga_scelta_casa = st.selectbox("🎯 Riga (Casa)", options=opzioni_righe, index=12, key="sel_casa")
+        with c_ctrl_c2:
+            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
+            c_btn1, c_btn2 = st.columns(2)
+            with c_btn1:
+                if st.button("⬇️", key="shift_down_casa", use_container_width=True, help="Slitta in basso"):
+                    df = st.session_state["griglia_casa"].copy().reset_index()
+                    idx = riga_scelta_casa - 1
+                    nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
+                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
+                    df_nuovo["N°"] = range(1, 21)
+                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
+                    st.rerun()
+            with c_btn2:
+                if st.button("⬆️", key="shift_up_casa", use_container_width=True, help="Slitta in alto"):
+                    df = st.session_state["griglia_casa"].copy().reset_index()
+                    idx = riga_scelta_casa - 1
+                    riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
+                    df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
+                    df_nuovo["N°"] = range(1, 21)
+                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
+                    st.rerun()
 
     # --- GESTIONE SQUADRA OSPITE ---
     with c_sq2:
@@ -105,30 +108,31 @@ if "dati_mappati" in st.session_state:
         
         st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, hide_index=False)
         
-        riga_scelta_ospite = st.selectbox("🎯 Seleziona N° riga su cui operare (Ospite)", options=opzioni_righe, index=12)
-        o_btn1, o_btn2 = st.columns(2)
-        with o_btn1:
-            if st.button("⬇️ Slitta in basso (Ospite)", key="shift_down_ospite", use_container_width=True):
-                df = st.session_state["griglia_ospite"].copy().reset_index()
-                idx = riga_scelta_ospite - 1
-                nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx:19]
-                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                st.rerun()
-        with c_btn2:
-            if st.button("⬆️ Slitta in alto (Ospite)", key="shift_up_ospite", use_container_width=True):
-                df = st.session_state["griglia_ospite"].copy().reset_index()
-                idx = riga_scelta_ospite - 1
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                st.rerun()
+        # Sotto-griglia bilanciata per i controlli Ospite (Speculare alla Casa)
+        c_ctrl_o1, c_ctrl_o2 = st.columns([1, 1])
+        with c_ctrl_o1:
+            riga_scelta_ospite = st.selectbox("🎯 Riga (Ospite)", options=opzioni_righe, index=12, key="sel_ospite")
+        with c_ctrl_o2:
+            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
+            o_btn1, o_btn2 = st.columns(2)
+            with o_btn1:
+                if st.button("⬇️", key="shift_down_ospite", use_container_width=True, help="Slitta in basso"):
+                    df = st.session_state["griglia_ospite"].copy().reset_index()
+                    idx = riga_scelta_ospite - 1
+                    nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
+                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
+                    df_nuovo["N°"] = range(1, 21)
+                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
+                    st.rerun()
+            with o_btn2:
+                if st.button("⬆️", key="shift_up_ospite", use_container_width=True, help="Slitta in alto"):
+                    df = st.session_state["griglia_ospite"].copy().reset_index()
+                    idx = riga_scelta_ospite - 1
+                    riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
+                    df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
+                    df_nuovo["N°"] = range(1, 21)
+                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
+                    st.rerun()
 
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
