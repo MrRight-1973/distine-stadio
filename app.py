@@ -8,12 +8,13 @@ import io
 import re
 from PIL import Image, ImageEnhance
 import qrcode
+import pytesseract
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione dinamica reale, correzione anagrafiche e impaginazione A4</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione locale gratuita, correzione anagrafiche e impaginazione A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -31,7 +32,7 @@ if "squadra_casa_nome" not in st.session_state:
 if "squadra_ospite_nome" not in st.session_state:
     st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
 
-# 1. SIDEBAR: CARICAMENTO FINO A 5 SPONSOR E CONFIGURAZIONE
+# 1. SIDEBAR: CONFIGURAZIONE
 st.sidebar.header("⚙️ Configurazione Partita")
 data_partita = st.sidebar.text_input("Data della partita", "28/09/2026")
 campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
@@ -39,7 +40,7 @@ campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - 
 st.sidebar.header("🏢 Pannello Sponsor (Max 5)")
 sponsor_files = st.sidebar.file_uploader("Carica i loghi degli sponsor (PNG/JPG)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 if len(sponsor_files) > 5:
-    st.sidebar.error("Puoi caricare un massimo di 5 sponsor!")
+    st.sidebar.error("Carica massimo 5 sponsor.")
     sponsor_files = sponsor_files[:5]
 
 st.sidebar.header("⚖️ Terna Arbitrale")
@@ -55,87 +56,77 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def formatta_grafica_riga_reale(testo_grezzo):
-    """Analizza il testo estratto e formatta in COGNOME Nome ('Anno) mantenendo C e V"""
-    # Cerca l'anno di nascita (2 o 4 cifre)
+def formatta_riga_flessibile(testo_grezzo):
+    """Formatta la riga in modo conservativo senza distruggere lettere o ruoli"""
+    testo_grezzo = testo_grezzo.strip()
+    
+    # Rileva l'anno di nascita (cerca date o numeri a 2/4 cifre)
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
-    # Protegge i ruoli di Capitano e Vice
+    # Protegge i ruoli importanti prima di rimuovere altri numeri della tessera
     ruolo = ""
-    if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): 
-        ruolo = " (C)"
-    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): 
-        ruolo = " (VC)"
+    if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
+    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): ruolo = " (VC)"
     
-    # Rimuove i lunghi numeri di tessera FIGC lasciando il testo alfabetico
+    # Rimuove solo i numeri lunghi dei codici tessera (4 o più cifre) lasciando intatto il testo
     testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
-    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
+    # Rimuove i numeri iniziali isolati della vecchia numerazione
+    testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
     
-    # Rimuove le lettere dei ruoli isolate per evitare doppioni nella formattazione
-    parole_pulite = [p for p in testo_puro.split() if p.upper() not in ["C", "VC", "V"]]
+    # Rimuove i vecchi tag per evitare doppioni
+    testo_puro = testo_puro.replace("(C)", "").replace("(VC)", "").replace("(V)", "").strip()
     
-    if len(parole_pulite) >= 2:
-        cognome = parole_pulite[0].upper()
-        nome = " ".join(parole_pulite[1:]).title()
-        res = f"{cognome} {nome}{ruolo}"
-        return f"{res} ({anno})" if anno else res
-    elif len(parole_pulite) == 1:
-        res = parole_pulite[0].upper() + ruolo
-        return f"{res} ({anno})" if anno else res
+    # Dividiamo in parole per forzare il COGNOME tutto maiuscolo e il nome in minuscolo
+    parole = [p for p in testo_puro.split() if p.upper() not in ["C", "VC", "V"]]
+    if len(parole) >= 2:
+        cognome = parole[0].upper()
+        nome = " ".join(parole[1:]).title()
+        risultato = f"{cognome} {nome}{ruolo}"
+        return f"{risultato} ({anno})" if anno else resultado
+    elif len(parole) == 1:
+        risultato = parole[0].upper() + ruolo
+        return f"{risultato} ({anno})" if anno else resultado
     return ""
 
-def esegui_scansione_dinamica_reale(uploaded_file):
-    """Estrattore nativo locale: analizza i flussi di testo reali del file senza alcun dato fisso"""
-    giocatori_rilevati = []
-    allenatore_rilevato = "Non rilevato"
-    squadra_rilevata = "SQUADRA RILEVATA"
-    
+def esegui_ocr_locale_stabile(uploaded_file):
+    """Esegue la lettura reale usando pytesseract (nativo su Streamlit Linux), senza blocchi"""
+    giocatori = []
+    all_nome = "Non rilevato"
+    squadra_nome = "SQUADRA RILEVATA"
     try:
-        # Algoritmo locale: analizza i metadati stringa e i blocchi testuali nativi del file caricato
-        convertito_testo = uploaded_file.getvalue().decode('utf-8', errors='ignore')
-        # Isola i blocchi alfanumerici superiori a 4 caratteri escludendo il rumore digitale
-        blocchi_grezzi = re.findall(r'[a-zA-Z0-9\s\(\)\/]{5,50}', convertito_testo)
+        img = Image.open(uploaded_file)
+        testo = pytesseract.image_to_string(img, lang='ita')
+        righe = testo.split('\n')
         
-        for blocco in blocchi_grezzi:
-            linea = blocco.strip()
-            if len(linea) < 5 or any(x in linea.upper() for x in ["SOCIETA", "FEDERAZIONE", "CAMPIONATO", "COMITATO"]):
+        for riga in righe:
+            riga_clean = riga.strip()
+            if len(riga_clean) < 4 or any(x in riga_clean.upper() for x in ["SOCIETA", "FEDERAZIONE", "CAMPIONATO"]):
                 continue
-            
-            # Cerca l'allenatore nel testo reale della foto
-            if "ALLENATORE" in linea.upper() or "ALL." in linea.upper():
-                allenatore_rilevato = re.sub(r'[^a-zA-Z\s]', '', linea).upper().replace("ALLENATORE", "").replace("ALL", "").strip()
+            if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
+                all_nome = re.sub(r'[^a-zA-Z\s]', '', riga_clean).replace("ALLENATORE", "").replace("All", "").strip().title()
                 continue
-            
-            # Rileva il nome della società in cima
-            if ("ASD" in linea.upper() or "F.C." in linea.upper() or "AC" in linea.upper() or "CLUB" in linea.upper()) and squadra_rilevata == "SQUADRA RILEVATA":
-                squadra_rilevata = re.sub(r'[^a-zA-Z\s\.]', '', linea).upper().strip()
+            if ("ASD" in riga_clean.upper() or "F.C." in riga_clean.upper() or "AZZURRA" in riga_clean.upper() or "PETTORAZZA" in riga_clean.upper()) and squadra_nome == "SQUADRA RILEVATA":
+                squadra_nome = riga_clean.upper()
                 continue
                 
-            riga_formattata = formatta_grafica_riga_reale(linea)
-            if riga_formattata and not any(x in riga_formattata.upper() for x in ["DIRIGENTE", "MEDICO", "MASSAGGIATORE", "ASSISTENTE"]):
-                if riga_formattata not in giocatori_rilevati:
-                    giocatori_rilevati.append(riga_formattata)
+            testo_formattato = formatta_riga_flessibile(riga_clean)
+            if testo_formattato and not any(x in testo_formattato.upper() for x in ["DIRIGENTE", "MEDICO", "TESSERA"]):
+                giocatori.append(testo_formattato)
     except:
         pass
-        
-    # Crea 20 slot pronti all'uso (vuoti o parzialmente riempiti) modificabili a schermo
-    while len(giocatori_rilevati) < 20:
-        giocatori_rilevati.append("")
-        
-    return giocatori_rilevati[:20], allenatore_rilevato.title(), squadra_rilevata
+    while len(giocatori) < 20: giocatori.append("")
+    return giocatori[:20], all_nome, squadra_nome
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI", use_container_width=True):
-        with st.spinner("Scansione in corso dei file caricati..."):
-            # L'applicazione analizza in modo 100% indipendente i due file separati
-            g_casa, a_casa, name_casa = esegui_scansione_dinamica_reale(foto_casa)
-            g_ospite, a_ospite, name_ospite = esegui_scansione_dinamica_reale(foto_ospite)
+        with st.spinner("Lettura delle immagini in corso..."):
+            g_casa, a_casa, name_casa = esegui_ocr_locale_stabile(foto_casa)
+            g_ospite, a_ospite, name_ospite = esegui_ocr_locale_stabile(foto_ospite)
             
             st.session_state.casa_giocatori_input = g_casa
             st.session_state.casa_all_input = a_casa
             st.session_state.squadra_casa_nome = name_casa
-            
             st.session_state.ospite_giocatori_input = g_ospite
             st.session_state.ospite_all_input = a_ospite
             st.session_state.squadra_ospite_nome = name_ospite
@@ -143,7 +134,7 @@ if foto_casa and foto_ospite:
 
 if st.session_state.dati_pronti:
     st.markdown("---")
-    st.warning("📝 **Pannello di Controllo:** Modifica o correggi i nomi e gli anni direttamente qui sotto se noti imperfezioni, poi genera il PDF.")
+    st.warning("📝 **Pannello di Controllo Segreteria:** Modifica o correggi i nomi e gli anni direttamente qui sotto se noti imperfezioni, poi genera il PDF.")
     edit_col1, edit_col2 = st.columns(2)
     lista_casa_corretta, lista_ospite_corretta = [], []
     
