@@ -37,7 +37,7 @@ def analizza_distinta_con_ia(immagine_pil, client):
     )
     
     # Utilizziamo il modello stabile di generazione corrente
-    modello_attivo = 'gemini-2.5-flash'
+    modello_attivo = 'gemini-3.8-flash'
     massimi_tentativi = 3
     
     for tentativo in range(massimi_tentativi):
