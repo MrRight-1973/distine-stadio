@@ -134,7 +134,7 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE PER SPETTATORI ---
+    # --- GENERAZIONE PDF FINALE PER SPETTATORI (TMPFILES.ORG) ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code Pubblico", type="primary"):
         with st.spinner("Generazione del foglio di gara e caricamento cloud per gli spettatori..."):
@@ -163,21 +163,27 @@ if "dati_mappati" in st.session_state:
                 # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
                 pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 2. Carica il PDF online tramite API su un server temporaneo pubblico (valido 14 giorni)
-                # Sostituisce la necessità di configurare database complessi per i test e l'uso sul campo
-                url_pubblico = "https://google.com" # Fallback di sicurezza
+                # 2. Carica il PDF online tramite tmpfiles.org (valido per tutti per 24 ore)
+                url_pubblico = "https://www.google.com" # URL di ripiego in caso di crash totale del web
+                caricato_con_successo = False
+                
                 try:
                     files = {'file': (f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf", pdf_bozza, 'application/pdf')}
-                    # Utilizziamo un server gratuito e anonimo che supporta upload via POST direct
-                    response_upload = requests.post("https://file.io", files=files)
-                    if response_upload.status_code == 200:
-                        url_pubblico = response_upload.json().get("link", url_pubblico)
+                    response_upload = requests.post("https://tmpfiles.org", files=files, timeout=10)
+                    
+                    if response_upload.status_code == 200 or response_upload.status_code == 201:
+                        data_json = response_upload.json()
+                        # tmpfiles restituisce un URL di visualizzazione, lo convertiamo in URL di download diretto
+                        url_visualizza = data_json.get("data", {}).get("url", "")
+                        if url_visualizza:
+                            url_pubblico = url_visualizza.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                            caricato_con_successo = True
                     else:
-                        st.warning("Caricamento cloud primario fallito. Il QR rimanderà a una pagina di cortesia.")
+                        st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Il QR conterrà un link temporaneo.")
                 except Exception as e_upload:
-                    st.warning(f"Impossibile generare il link online: {e_upload}")
+                    st.warning(f"Errore di rete durante il caricamento cloud: {e_upload}. Genero comunque il PDF.")
 
-                # 3. Genera il QR Code contenente il link web reale appena creato
+                # 3. Genera il QR Code contenente l'URL risultante
                 qr = qrcode.QRCode(version=1, box_size=10, border=1)
                 qr.add_data(url_pubblico)
                 qr.make(fit=True)
@@ -187,11 +193,14 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(qr_buffer, format="PNG")
                 qr_bytes = qr_buffer.getvalue()
                 
-                # 4. Rigenera il PDF inserendo questa volta il QR Code definitivo funzionante
+                # 4. Rigenera il PDF inserendo il QR Code definitivo
                 pdf_output = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 
-                st.success("🎉 PDF Generato! Il QR Code stampato sul foglio permetterà agli spettatori di scaricarlo.")
-                st.write(f"🔗 **Link Spettatori:** {url_pubblico}")
+                if caricato_con_successo:
+                    st.success("🎉 PDF Generato e caricato online! Il QR Code è attivo per tutto il pubblico (durata 24h).")
+                    st.write(f"🔗 **Link diretto spettatori:** {url_pubblico}")
+                else:
+                    st.error("⚠️ PDF generato solo in locale. Il QR code sul foglio non sarà raggiungibile dagli smartphone degli spettatori.")
                 
                 st.download_button(
                     label="📥 Scarica Distinta di Gara Finale (PDF da Stampare)",
@@ -201,4 +210,5 @@ if "dati_mappati" in st.session_state:
                     use_container_width=True
                 )
             except Exception as e:
-                st.error(f"Errore durante la creazione del file PDF: {e}")
+                st.error(f"Errore generico durante la creazione del file PDF: {e}")
+
