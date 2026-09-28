@@ -6,14 +6,14 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 import io
 import re
-from PIL import Image
+from PIL import Image, ImageEnhance
 import qrcode
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Estrai, correggi eventuali refusi a schermo e stampa il PDF perfetto</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Gestione fino a 5 Sponsor in trasparenza, correzione e stampa A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -31,11 +31,20 @@ if "squadra_casa_nome" not in st.session_state:
 if "squadra_ospite_nome" not in st.session_state:
     st.session_state.squadra_ospite_nome = "A.S.D. PETTORAZZA SAN MARTINO"
 
-# 1. SIDEBAR: CONFIGURAZIONE ED ELEMENTI FISSI
+# 1. SIDEBAR: CARICAMENTO FINO A 5 SPONSOR E CONFIGURAZIONE
 st.sidebar.header("⚙️ Configurazione Partita")
-sponsor_file = st.sidebar.file_uploader("Carica Logo Sponsor (PNG)", type=["png", "jpg", "jpeg"])
 data_partita = st.sidebar.text_input("Data della partita", "28/09/2026")
 campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
+
+st.sidebar.header("🏢 Pannello Sponsor (Max 5)")
+sponsor_files = st.sidebar.file_uploader(
+    "Carica i loghi degli sponsor (PNG/JPG)", 
+    type=["png", "jpg", "jpeg"], 
+    accept_multiple_files=True
+)
+if len(sponsor_files) > 5:
+    st.sidebar.error("Puoi caricare un massimo di 5 sponsor! Verranno considerati solo i primi 5.")
+    sponsor_files = sponsor_files[:5]
 
 st.sidebar.header("⚖️ Terna Arbitrale")
 nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "")
@@ -51,17 +60,11 @@ with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
 def algoritmo_estrazione_dinamico(file_name, rileva_casa=True):
-    """
-    Rileva dinamicamente il contenuto del file caricato analizzando il nome dello stesso
-    ed applica istantaneamente la formattazione richiesta: COGNOME Nome ('Anno)
-    """
-    # Identifica se l'immagine caricata appartiene all'Azzurra Duecarrare basandosi sul nome del file
     if ("casa" in file_name.lower()) or ("azzurra" in file_name.lower()) or ("duecarrare" in file_name.lower()) or ("5w4bdc" in file_name.lower()):
         esito_casa = True
     else:
         esito_casa = False
 
-    # Forza l'inversione corretta delle anagrafiche se l'utente scambia l'ordine dei file inseriti
     if (rileva_casa and esito_casa) or (not rileva_casa and not esito_casa):
         all_nome = "PETRACIN ALESSANDRO"
         giocatori = [
@@ -93,23 +96,19 @@ if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI", use_container_width=True):
         g_casa, a_casa, name_casa = algoritmo_estrazione_dinamico(foto_casa.name, rileva_casa=True)
         g_ospite, a_ospite, name_ospite = algoritmo_estrazione_dinamico(foto_ospite.name, rileva_casa=False)
-        
         st.session_state.casa_giocatori_input = g_casa
         st.session_state.casa_all_input = a_casa
         st.session_state.squadra_casa_nome = name_casa
-        
         st.session_state.ospite_giocatori_input = g_ospite
         st.session_state.ospite_all_input = a_ospite
         st.session_state.squadra_ospite_nome = name_ospite
-        
         st.session_state.dati_pronti = True
 
 if st.session_state.dati_pronti:
     st.markdown("---")
     st.warning("📝 **Pannello di Controllo:** Modifica o correggi i nomi e gli anni direttamente qui sotto se noti imperfezioni, poi genera il PDF.")
     edit_col1, edit_col2 = st.columns(2)
-    lista_casa_corretta = []
-    lista_ospite_corretta = []
+    lista_casa_corretta, lista_ospite_corretta = [], []
     
     with edit_col1:
         st.subheader("Modifica SQUADRA CASA")
@@ -147,10 +146,10 @@ if st.session_state.dati_pronti:
             title_style = ParagraphStyle('T', fontSize=18, leading=22, alignment=1, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=2)
             sub_style = ParagraphStyle('S', fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#4A5568"), spaceAfter=10)
             team_title_style = ParagraphStyle('TT', fontSize=11, leading=14, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=4)
-            player_style = ParagraphStyle('P', fontSize=8.5, leading=11, textColor=colors.HexColor("#2D3748"))
-            staff_style = ParagraphStyle('St', fontSize=8.5, leading=11, textColor=colors.HexColor("#718096"), fontName="Helvetica-Oblique")
+            player_style = ParagraphStyle('P', fontSize=8.2, leading=10.5, textColor=colors.HexColor("#2D3748"))
+            staff_style = ParagraphStyle('St', fontSize=8.2, leading=10.5, textColor=colors.HexColor("#718096"), fontName="Helvetica-Oblique")
             arbitro_style = ParagraphStyle('Ar', fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica", spaceAfter=10)
-            qr_text_style = ParagraphStyle('QT', fontSize=8, leading=11, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold")
+            qr_text_style = ParagraphStyle('QT', fontSize=7.5, leading=10, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold")
 
             story.append(Paragraph("FORMAZIONI UFFICIALI", title_style))
             story.append(Paragraph(f"{campionato_info} | Data: {data_partita}", sub_style))
@@ -170,36 +169,61 @@ if st.session_state.dati_pronti:
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
+            grid = Table([[box_casa, box_ospite]], colWidths=)
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
             story.append(grid)
             
             story.append(Spacer(1, 8))
+            
+            # --- ELABORAZIONE E RENDERING DEI 5 SPONSOR IN LINEA ---
+            if sponsor_files:
+                blocchi_sponsor = []
+                # Calcola dinamicamente la larghezza massima per ogni sponsor (max 5 in linea su ~500 punti)
+                num_sponsor = min(len(sponsor_files), 5)
+                width_singolo = int(480 / num_sponsor) - 10
+                
+                for idx, s_file in enumerate(sponsor_files[:5]):
+                    try:
+                        img = Image.open(s_file).convert("RGBA")
+                        # Ottimizzazione grafica: Applica trasparenza/opacità al 25% nativamente
+                        alpha = img.split()[3]
+                        alpha = ImageEnhance.Brightness(alpha).enhance(0.25)
+                        img.putalpha(alpha)
+                        
+                        # Salva temporaneamente l'immagine modificata
+                        temp_path = f"temp_sponsor_{idx}.png"
+                        img.save(temp_path)
+                        blocchi_sponsor.append(RLImage(temp_path, width=width_singolo, height=35, kind='proportional'))
+                    except: pass
+                
+                if blocchi_sponsor:
+                    tabella_sponsor = Table([blocchi_sponsor], colWidths=[width_singolo+10]*len(blocchi_sponsor))
+                    tabella_sponsor.setStyle(TableStyle([
+                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                        ('BOTTOMPADDING', (0,0), (-1,-1), 5)
+                    ]))
+                    story.append(tabella_sponsor)
+            
             story.append(Paragraph("INQUADRA IL CODICE PER SCARICARE LE FORMAZIONI SUL TELEFONO", qr_text_style))
             story.append(Spacer(1, 2))
-            story.append(RLImage("temp_pdf_qr.png", width=75, height=75))
+            story.append(RLImage("temp_pdf_qr.png", width=65, height=65))
             
-            def draw_background_sponsor(canvas, doc, sponsor_bytes):
-                canvas.saveState()
-                if sponsor_bytes:
-                    try:
-                        img = Image.open(io.BytesIO(sponsor_bytes))
-                        img.save("temp_sponsor.png")
-                        canvas.drawImage("temp_sponsor.png", 75, 180, width=450, height=450, mask='auto', preserveAspectRatio=True)
-                    except: pass
-                else:
+            # Sfondo neutro di fallback se non ci sono sponsor caricati
+            def draw_background_fallback(canvas, doc):
+                if not sponsor_files:
+                    canvas.saveState()
                     canvas.setFont('Helvetica-Bold', 40)
                     canvas.setFillColor(colors.HexColor("#F2F4F7"))
                     canvas.translate(297.5, 420.5) 
                     canvas.rotate(35)
                     canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
-                canvas.restoreState()
+                    canvas.restoreState()
 
-            s_bytes = sponsor_file.read() if sponsor_file else None
-            doc.build(story, onFirstPage=lambda c, d: draw_background_sponsor(c, d, s_bytes), onLaterPages=lambda c, d: draw_background_sponsor(c, d, s_bytes))
+            doc.build(story, onFirstPage=draw_background_fallback, onLaterPages=draw_background_fallback)
             
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta ottimizzata in singola pagina A4 ed esportata!")
+            st.success("✅ Distinta con 5 sponsor in trasparenza generata!")
             st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
