@@ -5,7 +5,6 @@ import requests
 import base64
 from estrattore import analizza_distinta, genera_pdf
 
-# 1. Configurazione della pagina Streamlit
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
 st.title("⚽ Centro Gestione Distinte Gara")
@@ -13,9 +12,8 @@ st.write("Carica le distinte, compila i dati della terna e genera il PDF unico A
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
-# --- NUOVA SEZIONE: PUNTO 2 (DATI DELLA GARA COMPILABILI) ---
 st.markdown("### 📝 Dati della Gara ed Arbitri")
-st.write("I campi Campionato e Data verranno letti in automatico dall'AI, ma puoi sovrascriverli o correggerli qui sotto se necessario.")
+st.write("I campi Campionato e Data verranno letti in automatico dall'AI, ma puoi sovrascriverli qui sotto se necessario.")
 
 c_info1, c_info2 = st.columns(2)
 with c_info1:
@@ -25,12 +23,11 @@ with c_info1:
 
 with c_info2:
     input_data = st.text_input("📅 Data della Partita (es. 28/09/2026)", value="")
-    st.write("") # Spaziatore grafico
+    st.write("") 
     input_assistente2 = st.text_input("🚩 Assistente 2 (Guardalinee)", value="")
 
 st.markdown("---")
 
-# 2. Interfaccia grafica a due colonne per il caricamento file
 col1, col2 = st.columns(2)
 
 with col1:
@@ -45,7 +42,6 @@ with col2:
     if file_ospite:
         st.image(file_ospite, use_container_width=True)
 
-# 3. Blocco di attivazione ed elaborazione
 if file_casa and file_ospite:
     st.write("")
     if st.button("⚡ Elabora e Genera PDF con QR Code", type="primary"):
@@ -54,25 +50,21 @@ if file_casa and file_ospite:
         else:
             with st.spinner("Estrazione dati e creazione PDF in corso..."):
                 try:
-                    # Estrazione e formattazione con AI
                     dati_casa = analizza_distinta(file_casa, "CASA", api_key_openai)
                     dati_ospite = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
-                    # Raggruppamento delle informazioni extra inserite dall'utente
                     info_gara = {
                         "campionato": input_campionato if input_campionato else dati_casa.get("campionato", "NON INDICATO"),
-                        "data": input_data if input_data else dati_casa.get("data", "NON INDICATA"),
+                        "data": input_data if input_data else dati_casa.get("data", "NON INDICAＴA"),
                         "arbitro": input_arbitro if input_arbitro else "NON INDICATO",
                         "assistente1": input_assistente1 if input_assistente1 else "NON INDICATO",
                         "assistente2": input_assistente2 if input_assistente2 else "NON INDICATO"
                     }
                     
-                    # Generazione PDF A4 con intestazione completa
                     pdf_data = genera_pdf(dati_casa, dati_ospite, info_gara)
                     st.session_state["pdf_pronto"] = pdf_data
                     st.success("🎉 Distinte elaborate ed unite con successo!")
                     
-                    # Caricamento cloud temporaneo su file.io
                     pdf_url = None
                     try:
                         files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
@@ -82,12 +74,10 @@ if file_casa and file_ospite:
                     except Exception:
                         pdf_url = None
 
-                    # Failsafe se file.io non risponde (rimanda alla Web App stessa)
                     if not pdf_url:
                         pdf_url = "https://streamlit.io"
                         st.info("💡 Nota: Il QR Code rimanderà alla pagina web corrente per scaricare il file dal telefono.")
 
-                    # Layout dei risultati visivi a schermo
                     c1, c2 = st.columns(2)
                     with c1:
                         st.markdown("### 📋 Riepilogo Gara")
@@ -108,7 +98,7 @@ if file_casa and file_ospite:
                     
                     with c2:
                         st.markdown("### 📱 Scarica su Smartphone")
-                        st.write("Inquadra questo QR Code con il telefono per scaricare il documento:")
+                        st.write("Inquadra questo QR Code con il telefono per accedere al documento:")
                         
                         qr = qrcode.QRCode(
                             version=None,
@@ -130,7 +120,6 @@ if file_casa and file_ospite:
                 except Exception as e:
                     st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
 
-# Pulsante di scaricamento per dispositivi mobili
 if "pdf_pronto" in st.session_state:
     st.markdown("---")
     st.subheader("📲 Area Download Smartphone")
