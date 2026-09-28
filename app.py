@@ -1,408 +1,196 @@
-import io
-import re
-from pathlib import Path
-
 import streamlit as st
-import pandas as pd
-import pytesseract
-from PIL import Image, ImageOps, ImageFilter
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm
+import os
+import json
+from google import genai
+from google.genai import types
+from PIL import Image
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from fpdf import FPDF
 
-st.set_page_config(page_title="Distinte partita", page_icon="⚽", layout="wide")
+# -------------------------------------------------------------------------
+# 1. STRUTTURA DATI PYDANTIC (Forza Gemini a rispondere in JSON strutturato)
+# -------------------------------------------------------------------------
+class Giocatore(BaseModel):
+    numero: int = Field(description="Numero di riga o di maglia nella distinta")
+    nome: str = Field(description="Cognome e Nome del giocatore")
+    anno_nascita: int = Field(description="Anno di nascita a 4 cifre del giocatore")
+    ruolo_speciale: Optional[str] = Field(None, description="Indica se Capitano (C) o Vice Capitano (V)")
 
-st.title("⚽ Distinte partita → PDF A4")
-st.caption("Due distinte, squadra di casa e squadra ospite, su un unico foglio A4.")
+class SquadraDati(BaseModel):
+    nome_squadra: str = Field(description="Nome della squadra calcistica")
+    allenatore: str = Field(description="Nome dell'allenatore principale")
+    allenatore_seconda: Optional[str] = Field(None, description="Nome dell'allenatore in seconda, se presente")
+    giocatori: List[Giocatore]
 
-# ------------------------------------------------------------
-# OCR
-# ------------------------------------------------------------
-
-def prep(img):
-    img = img.convert("L")
-    img = ImageOps.autocontrast(img)
-    img = img.filter(ImageFilter.SHARPEN)
-    img = img.resize((img.width * 3, img.height * 3))
-    return img
-
-def remove_grid_lines(img):
-    """Riduce le linee della tabella per aiutare l'OCR."""
-    import cv2
-    import numpy as np
-
-    arr = np.array(img)
-    bw = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-
-    horizontal = cv2.morphologyEx(
-        bw, cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (45, 1))
+# -------------------------------------------------------------------------
+# 2. FUNZIONE ESTRAZIONE DATI CON GEMINI API
+# -------------------------------------------------------------------------
+def estrai_dati_distinta(uploaded_file, api_key: str) -> SquadraDati:
+    """Invia l'immagine caricata a Gemini 2.5 Flash per l'estrazione dati."""
+    # Inizializza il client con la chiave passata
+    client = genai.Client(api_key=api_key)
+    
+    # Apri l'immagine tramite Pillow
+    img = Image.open(uploaded_file)
+    
+    prompt = (
+        "Analizza questa immagine di una distinta di gara di calcio. "
+        "Estrai accuratamente il nome della squadra, il nome dell'allenatore, "
+        "l'allenatore in seconda (se presente) e la lista di tutti i giocatori "
+        "con il loro anno di nascita (calcolato o letto dalla data di nascita) "
+        "e l'eventuale ruolo di capitano/vice."
     )
-    vertical = cv2.morphologyEx(
-        bw, cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (1, 45))
+    
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=[img, prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=SquadraDati,
+            temperature=0.1
+        ),
     )
+    
+    # Ritorna l'oggetto Pydantic validato caricando il JSON di risposta
+    return SquadraDati.model_validate_json(response.text)
 
-    lines = cv2.bitwise_or(horizontal, vertical)
-    cleaned = cv2.subtract(bw, lines)
-    cleaned = cv2.bitwise_not(cleaned)
+# -------------------------------------------------------------------------
+# 3. FUNZIONE GENERAZIONE PDF REPORT
+# -------------------------------------------------------------------------
+class PDFReport(FPDF):
+    def header(self):
+        self.set_font("Arial", "B", 16)
+        self.set_text_color(2, 117, 216) # Colore Blu principale
+        self.cell(0, 10, "REPORT COMPLETO DISTINTE DI GARA", ln=True, align="C")
+        self.ln(5)
+        
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Arial", "I", 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f"Pagina {self.page_no()}", align="C")
 
-    return Image.fromarray(cleaned)
+def genera_pdf_report(squadre: List[SquadraDati], output_path: str):
+    """Crea un file PDF strutturato e pulito con i dati estratti."""
+    pdf = PDFReport()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    for sq in squadre:
+        # Intestazione Squadra
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_text_color(240, 173, 78) # Colore Giallo/Arancio societario
+        pdf.cell(0, 10, f"Squadra: {sq.nome_squadra.upper()}", ln=True)
+        pdf.set_text_color(0, 0, 0)
+        
+        # Staff Tecnico
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(40, 7, "Allenatore:", ln=False)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 7, sq.allenatore, ln=True)
+        
+        if sq.allenatore_seconda:
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(40, 7, "Allenatore in Seconda:", ln=False)
+            pdf.set_font("Arial", "", 10)
+            pdf.cell(0, 7, sq.allenatore_seconda, ln=True)
+            
+        pdf.ln(3)
+        
+        # Tabella Giocatori - Intestazione
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(15, 7, "N°", border=1, ln=False, align="C", fill=True)
+        pdf.cell(90, 7, "Cognome e Nome", border=1, ln=False, fill=True)
+        pdf.cell(40, 7, "Anno Nascita", border=1, ln=False, align="C", fill=True)
+        pdf.cell(40, 7, "Note", border=1, ln=True, align="C", fill=True)
+        
+        # Righe Giocatori
+        pdf.set_font("Arial", "", 10)
+        for g in sq.giocatori:
+            ruolo = g.ruolo_speciale if g.ruolo_speciale else "-"
+            pdf.cell(15, 6, str(g.numero), border=1, ln=False, align="C")
+            pdf.cell(90, 6, g.nome, border=1, ln=False)
+            pdf.cell(40, 6, str(g.anno_nascita), border=1, ln=False, align="C")
+            pdf.cell(40, 6, ruolo, border=1, ln=True, align="C")
+            
+        pdf.ln(10) # Spazio tra le due squadre
+        
+    pdf.output(output_path)
 
-def ocr_crop(img, box, psm=6):
-    crop = img.crop(box)
-    crop = prep(crop)
-    crop = remove_grid_lines(crop)
-    return pytesseract.image_to_string(
-        crop,
-        lang="ita+eng",
-        config=f"--psm {psm}",
-        timeout=30
+# -------------------------------------------------------------------------
+# 4. INTERFACCIA UTENTE STREAMLIT (Web UI)
+# -------------------------------------------------------------------------
+st.set_page_config(page_title="Estrattore Distinte Calcio", layout="centered")
+
+st.title("⚽ Estrattore Distinte Calcio con AI")
+st.write("Carica le due immagini delle distinte per estrarre l'elenco dei giocatori e generare un PDF riassuntivo.")
+
+# Sidebar per la configurazione della chiave API
+st.sidebar.header("Configurazione")
+api_key = st.sidebar.text_input("Inserisci la tua Gemini API Key:", type="password")
+st.sidebar.markdown("[Come ottenere una API Key gratuita](https://aistudio.google.com/)")
+
+if not api_key:
+    st.info("Per favore, inserisci la tua Gemini API Key nella barra laterale per iniziare.")
+else:
+    # Selezione file (Massimo 2 file contemporaneamente)
+    st.subheader("1. Carica i file delle distinte")
+    uploaded_files = st.file_uploader(
+        "Seleziona esattamente 2 immagini (PNG, JPG, JPEG)", 
+        type=["png", "jpg", "jpeg"], 
+        accept_multiple_files=True
     )
-
-def normalize_name(s):
-    s = re.sub(r"\s+", " ", s).strip()
-    s = re.sub(r"^[^A-Za-zÀ-ÖØ-öø-ÿ]+", "", s)
-    s = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ .'\-]+$", "", s)
-    return s.strip()
-
-def is_name(s):
-    letters = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]", s)
-    if len(letters) < 4:
-        return False
-    bad = [
-        "cognome", "nome", "stadio", "campo", "matricola",
-        "documento", "identificazione", "allenatore", "dirigente",
-        "assistente", "medico", "tessera", "comune"
-    ]
-    return not any(x in s.lower() for x in bad)
-
-def extract_names_from_lines(text):
-    result = []
-    for line in text.splitlines():
-        n = normalize_name(line)
-        if is_name(n):
-            result.append(n.upper())
-
-    # deduplica conservando ordine
-    out = []
-    seen = set()
-    for n in result:
-        k = re.sub(r"[^a-zà-öø-ÿ]", "", n.lower())
-        if k and k not in seen:
-            seen.add(k)
-            out.append(n)
-    return out
-
-def extract_team_name(img, model):
-    # Il nome viene lasciato facilmente correggibile dall'utente.
-    if model == "figc":
-        crop = img.crop((250, 50, img.width - 40, 230))
-    else:
-        crop = img.crop((250, 30, img.width - 40, 220))
-
-    text = pytesseract.image_to_string(
-        prep(crop), lang="ita+eng", config="--psm 6", timeout=30
-    )
-
-    # Pattern FIGC: "915577 A.S.D. PETTORAZZA SAN MARTINO"
-    m = re.search(
-        r"\b\d{5,7}\s+(.+?)(?:\n|$)",
-        text,
-        re.I
-    )
-    if m:
-        name = re.sub(r"\s+", " ", m.group(1)).strip()
-        if name:
-            return name.upper()
-
-    # fallback: prima riga significativa
-    for line in text.splitlines():
-        line = re.sub(r"\s+", " ", line).strip()
-        if len(line) > 4 and "FIGC" not in line.upper():
-            return line.upper()
-
-    return ""
-
-def extract_figc(img):
-    # Prima distinta dell'esempio:
-    # colonna Cognome e nome circa x 19%-42%, tabella circa y 21%-75%.
-    w, h = img.size
-    name_box = (int(w*.175), int(h*.205), int(w*.445), int(h*.745))
-    year_box = (int(w*.085), int(h*.205), int(w*.175), int(h*.745))
-
-    names_text = ocr_crop(img, name_box, 6)
-    year_text = ocr_crop(img, year_box, 6)
-
-    names = extract_names_from_lines(names_text)
-
-    # Anni: ricaviamo gli anni dalle date riconosciute.
-    dates = re.findall(r"\b\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})\b", year_text)
-    years = [x[-2:] for x in dates]
-
-    players = []
-    for i, name in enumerate(names[:30]):
-        players.append({
-            "Nome": name,
-            "Anno": years[i] if i < len(years) else ""
-        })
-
-    # Staff: cerchiamo solo "Allenatore", evitando la sezione giocatori.
-    full = pytesseract.image_to_string(
-        prep(img), lang="ita+eng", config="--psm 6", timeout=45
-    )
-    coaches = []
-    for m in re.finditer(
-        r"Allenatore\s*:?\s*([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý .'\-]+)",
-        full, re.I
-    ):
-        n = normalize_name(m.group(1))
-        n = re.split(r"\s{2,}|Tessera|Matricola", n, flags=re.I)[0]
-        if is_name(n):
-            coaches.append(n.upper())
-
-    return players, list(dict.fromkeys(coaches))
-
-def extract_other(img):
-    # Seconda distinta dell'esempio:
-    # G/M/A + Cognome e Nome.
-    w, h = img.size
-    name_box = (int(w*.185), int(h*.265), int(w*.485), int(h*.685))
-    birth_box = (int(w*.09), int(h*.265), int(w*.185), int(h*.685))
-
-    names_text = ocr_crop(img, name_box, 6)
-    birth_text = ocr_crop(img, birth_box, 6)
-
-    names = extract_names_from_lines(names_text)
-
-    # Cerca gli anni in forme "'05", "05" o "2005".
-    years = []
-    for line in birth_text.splitlines():
-        matches = re.findall(r"(?:['’]\s*)?(\d{2})\b", line)
-        # Evita numeri di riga troppo isolati.
-        if matches:
-            years.append(matches[-1])
-
-    players = []
-    for i, name in enumerate(names[:30]):
-        players.append({
-            "Nome": name,
-            "Anno": years[i] if i < len(years) else ""
-        })
-
-    full = pytesseract.image_to_string(
-        prep(img), lang="ita+eng", config="--psm 6", timeout=45
-    )
-    coaches = []
-    for m in re.finditer(
-        r"Allenatore(?:\s+Sig\.)?\s*:?\s*([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý .'\-]+)",
-        full, re.I
-    ):
-        n = normalize_name(m.group(1))
-        n = re.split(r"\s{2,}|Tessera|Matricola", n, flags=re.I)[0]
-        if is_name(n):
-            coaches.append(n.upper())
-
-    return players, list(dict.fromkeys(coaches))
-
-def analyze(file, model):
-    img = Image.open(file)
-    if model == "figc":
-        players, coaches = extract_figc(img)
-    else:
-        players, coaches = extract_other(img)
-
-    team = extract_team_name(img, model)
-    return {
-        "team": team,
-        "players": players,
-        "coaches": coaches,
-    }
-
-# ------------------------------------------------------------
-# PDF: due squadre su UNA pagina A4, due colonne
-# ------------------------------------------------------------
-
-def make_pdf(home, away):
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    W, H = A4
-
-    margin_x = 9 * mm
-    top = H - 12 * mm
-    gap = 5 * mm
-    col_w = (W - 2*margin_x - gap) / 2
-    left_x = margin_x
-    right_x = margin_x + col_w + gap
-
-    c.setFont("Helvetica-Bold", 15)
-    c.drawCentredString(W/2, top, "DISTINTE GIOCATORI")
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(W/2, top - 5*mm, "Partita")
-
-    def draw_team(x, y, team):
-        # cornice colonna
-        c.setLineWidth(0.6)
-        c.rect(x, 10*mm, col_w, H - 28*mm)
-
-        c.setFont("Helvetica-Bold", 10)
-        team_name = team["team"] or "SQUADRA"
-        c.drawCentredString(x + col_w/2, y, team_name[:48])
-        y -= 6*mm
-
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawString(x + 3*mm, y, "#")
-        c.drawString(x + 11*mm, y, "GIOCATORE")
-        c.drawRightString(x + col_w - 3*mm, y, "ANNO")
-        y -= 3*mm
-        c.line(x + 2*mm, y, x + col_w - 2*mm, y)
-        y -= 4.2*mm
-
-        c.setFont("Helvetica", 7.5)
-        for i, p in enumerate(team["players"][:25], 1):
-            if y < 29*mm:
-                break
-            c.drawString(x + 3*mm, y, str(i))
-            name = p["Nome"]
-            # evita che nomi lunghi escano dalla colonna
-            if len(name) > 31:
-                name = name[:30] + "…"
-            c.drawString(x + 11*mm, y, name)
-            year = p.get("Anno", "")
-            if year:
-                c.drawRightString(x + col_w - 3*mm, y, "'" + year.replace("'", ""))
-            y -= 4.5*mm
-
-        y -= 2*mm
-        c.line(x + 2*mm, y, x + col_w - 2*mm, y)
-        y -= 5*mm
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawString(x + 3*mm, y, "ALLENATORI")
-        y -= 4.5*mm
-        c.setFont("Helvetica", 7.5)
-        for coach in team["coaches"][:3]:
-            c.drawString(x + 3*mm, y, coach[:40])
-            y -= 4.5*mm
-
-    draw_team(left_x, top - 12*mm, home)
-    draw_team(right_x, top - 12*mm, away)
-
-    c.setFont("Helvetica", 6.5)
-    c.drawCentredString(W/2, 5*mm, "Documento generato automaticamente — verificare i dati prima della pubblicazione.")
-
-    c.save()
-    buf.seek(0)
-    return buf.getvalue()
-
-# ------------------------------------------------------------
-# UI
-# ------------------------------------------------------------
-
-st.subheader("1. Carica le due distinte")
-
-c1, c2 = st.columns(2)
-
-with c1:
-    st.markdown("### 🏠 Squadra di casa")
-    home_file = st.file_uploader(
-        "Distinta casa",
-        type=["jpg", "jpeg", "png"],
-        key="home"
-    )
-    home_model = st.selectbox(
-        "Formato distinta casa",
-        ["figc", "standard"],
-        format_func=lambda x: "FIGC / Prima distinta" if x == "figc" else "Distinta standard / seconda distinta",
-        key="home_model"
-    )
-
-with c2:
-    st.markdown("### ✈️ Squadra ospite")
-    away_file = st.file_uploader(
-        "Distinta ospite",
-        type=["jpg", "jpeg", "png"],
-        key="away"
-    )
-    away_model = st.selectbox(
-        "Formato distinta ospite",
-        ["standard", "figc"],
-        format_func=lambda x: "Distinta standard / seconda distinta" if x == "standard" else "FIGC / Prima distinta",
-        key="away_model"
-    )
-
-if st.button("🔎 Estrai dati", type="primary", disabled=not (home_file and away_file)):
-    with st.spinner("Analizzo le due distinte..."):
-        st.session_state.home_data = analyze(home_file, home_model)
-        st.session_state.away_data = analyze(away_file, away_model)
-
-if "home_data" in st.session_state and "away_data" in st.session_state:
-    st.divider()
-    st.subheader("2. Controlla e correggi i dati")
-
-    for side, label in [("home", "🏠 CASA"), ("away", "✈️ OSPITE")]:
-        data = st.session_state[f"{side}_data"]
-        st.markdown(f"### {label}")
-
-        data["team"] = st.text_input(
-            "Nome squadra",
-            data["team"],
-            key=f"{side}_team_name"
-        )
-
-        df = pd.DataFrame(data["players"])
-        if df.empty:
-            df = pd.DataFrame(columns=["Nome", "Anno"])
-
-        edited = st.data_editor(
-            df,
-            num_rows="dynamic",
-            hide_index=True,
-            use_container_width=True,
-            key=f"{side}_players_editor",
-            column_config={
-                "Nome": st.column_config.TextColumn("Giocatore"),
-                "Anno": st.column_config.TextColumn("Anno nascita", help="Inserire ad esempio 05")
-            }
-        )
-
-        coaches_text = st.text_area(
-            "Allenatori — uno per riga",
-            "\n".join(data["coaches"]),
-            key=f"{side}_coaches"
-        )
-
-        players = []
-        for _, row in edited.iterrows():
-            name = str(row.get("Nome", "")).strip()
-            year = str(row.get("Anno", "")).strip().replace("'", "")
-            if name and name.lower() != "nan":
-                players.append({"Nome": name.upper(), "Anno": year})
-
-        data["players"] = players
-        data["coaches"] = [
-            x.strip().upper()
-            for x in coaches_text.splitlines()
-            if x.strip()
-        ]
-
-    st.divider()
-    st.subheader("3. Genera il PDF A4")
-
-    pdf = make_pdf(
-        st.session_state.home_data,
-        st.session_state.away_data
-    )
-
-    st.download_button(
-        "📄 Scarica PDF — CASA + OSPITE su un solo A4",
-        pdf,
-        file_name="distinte_partita_A4.pdf",
-        mime="application/pdf",
-        type="primary"
-    )
-
-    st.info(
-        "Il PDF è già impaginato in due colonne: squadra di casa a sinistra e squadra ospite a destra. "
-        "L'anno di nascita viene mostrato come '05, '04, ecc."
-    )
+    
+    if uploaded_files:
+        if len(uploaded_files) != 2:
+            st.warning("Per favore, seleziona esattamente 2 file per procedere al confronto completo.")
+        else:
+            st.success("File caricati correttamente!")
+            
+            # Bottone di avvio processo
+            if st.button("🚀 Avvia Estrazione e Genera PDF"):
+                squadre_estratte = []
+                
+                # Progress bar per il feedback visivo
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for idx, file in enumerate(uploaded_files):
+                    status_text.text(f"Elaborazione del file {idx+1}: {file.name}...")
+                    try:
+                        dati_squadra = estrai_dati_distinta(file, api_key)
+                        squadre_estratte.append(dati_squadra)
+                        
+                        # Mostra un'anteprima dei dati estratti nell'interfaccia
+                        with st.expander(f"Visualizza anteprima: {dati_squadra.nome_squadra}"):
+                            st.write(f"**Allenatore:** {dati_squadra.allenatore}")
+                            st.write(f"**Giocatori trovati:** {len(dati_squadra.giocatori)}")
+                            st.dataframe(dati_squadra.giocatori)
+                            
+                    except Exception as e:
+                        st.error(f"Errore durante la lettura di {file.name}: {e}")
+                    
+                    progress_bar.progress((idx + 1) / len(uploaded_files))
+                
+                status_text.text("Generazione del report PDF in corso...")
+                
+                if len(squadre_estratte) == 2:
+                    pdf_filename = "report_distinte_gara.pdf"
+                    try:
+                        genera_pdf_report(squadre_estratte, pdf_filename)
+                        
+                        # Bottone di download del file PDF generato
+                        st.success("✨ Report PDF generato con successo!")
+                        with open(pdf_filename, "rb") as f:
+                            st.download_button(
+                                label="📥 Scarica Report PDF",
+                                data=f,
+                                file_name=pdf_filename,
+                                mime="application/pdf"
+                            )
+                    except Exception as e:
+                        st.error(f"Errore nella creazione del PDF: {e}")
+                else:
+                    st.error("Impossibile generare il PDF. Uno o entrambi i file hanno riscontrato errori.")
