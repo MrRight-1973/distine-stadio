@@ -134,10 +134,10 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE ---
+    # --- GENERAZIONE PDF FINALE PER SPETTATORI ---
     st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 definitivo..."):
+    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code Pubblico", type="primary"):
+        with st.spinner("Generazione del foglio di gara e caricamento cloud per gli spettatori..."):
             try:
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -160,40 +160,45 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                pdf_url = "https://distinte-duecarrare.streamlit.app/"
+                # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
+                pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
-                qr.add_data(pdf_url)
+                # 2. Carica il PDF online tramite API su un server temporaneo pubblico (valido 14 giorni)
+                # Sostituisce la necessità di configurare database complessi per i test e l'uso sul campo
+                url_pubblico = "https://google.com" # Fallback di sicurezza
+                try:
+                    files = {'file': (f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf", pdf_bozza, 'application/pdf')}
+                    # Utilizziamo un server gratuito e anonimo che supporta upload via POST direct
+                    response_upload = requests.post("https://file.io", files=files)
+                    if response_upload.status_code == 200:
+                        url_pubblico = response_upload.json().get("link", url_pubblico)
+                    else:
+                        st.warning("Caricamento cloud primario fallito. Il QR rimanderà a una pagina di cortesia.")
+                except Exception as e_upload:
+                    st.warning(f"Impossibile generare il link online: {e_upload}")
+
+                # 3. Genera il QR Code contenente il link web reale appena creato
+                qr = qrcode.QRCode(version=1, box_size=10, border=1)
+                qr.add_data(url_pubblico)
                 qr.make(fit=True)
                 img_qr = qr.make_image(fill_color="black", back_color="white")
-                buf_qr = io.BytesIO()
-                img_qr.save(buf_qr, format="PNG")
-                qr_bytes = buf_qr.getvalue()
                 
-                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
-                st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
+                qr_buffer = io.BytesIO()
+                img_qr.save(qr_buffer, format="PNG")
+                qr_bytes = qr_buffer.getvalue()
                 
-            except Exception as ex:
-                st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
-
-if "pdf_interattivo_pronto" in st.session_state:
-    st.write("")
-    c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="💾 Scarica PDF per il Computer",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+                # 4. Rigenera il PDF inserendo questa volta il QR Code definitivo funzionante
+                pdf_output = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
+                
+                st.success("🎉 PDF Generato! Il QR Code stampato sul foglio permetterà agli spettatori di scaricarlo.")
+                st.write(f"🔗 **Link Spettatori:** {url_pubblico}")
+                
+                st.download_button(
+                    label="📥 Scarica Distinta di Gara Finale (PDF da Stampare)",
+                    data=pdf_output,
+                    file_name=f"distinta_{info_gara_corrette['data'].replace('/', '-')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Errore durante la creazione del file PDF: {e}")
