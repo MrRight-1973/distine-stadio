@@ -2,3 +2,4 @@ streamlit
 openai
 reportlab
 qrcode[pil]
+requests
