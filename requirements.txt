@@ -1,5 +1,5 @@
 streamlit
-google-genai
+google-genai>=0.1.1
 pillow
 pydantic
 fpdf2
