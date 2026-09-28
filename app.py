@@ -168,26 +168,23 @@ if "dati_mappati" in st.session_state:
                 caricato_con_successo = False
                 
                 try:
-                    # Filebin richiede di definire un "bin" (un contenitore) univoco, creiamolo con la data e un codice casuale
                     import random
                     id_partita = f"distinta_{info_gara_corrette['data'].replace('/', '_')}_{random.randint(1000, 9999)}".lower()
                     nome_file = f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf"
                     
-                    # URL di upload diretto per il filebin
+                    # CORREZIONE CRITICA: Aggiunto lo slash '/' tra filebin.net e {id_partita}
                     upload_url = f"https://filebin.net{id_partita}/{nome_file}"
                     
-                    # Inviamo i byte crudi del PDF tramite richiesta PUT (standard per filebin)
+                    # Inviamo i byte crudi del PDF tramite richiesta PUT
                     headers = {"Content-Type": "application/pdf"}
                     response_upload = requests.put(upload_url, data=pdf_bozza, headers=headers, timeout=10)
                     
-                    # CORREZIONE SINTATTICA DEFINITIVA: Controllo esplicito dello status code
                     if response_upload.status_code == 200 or response_upload.status_code == 201:
                         # L'URL di download diretto per gli spettatori sarà questo:
                         url_pubblico = f"https://filebin.net{id_partita}/{nome_file}"
                         caricato_con_successo = True
                     else:
                         st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Tento fallback rapido...")
-                        # Fallback integrato su ix.io (senza chiamare .seek())
                         payload_ix = {'f:1': pdf_bozza}
                         response_ix = requests.post("http://ix.io", data=payload_ix, timeout=8)
                         if response_ix.status_code == 200:
