@@ -1,195 +1,202 @@
-import streamlit as st
-import io
-import qrcode
-import requests
 import base64
-import pandas as pd
-from estrattore import analizza_distinta, genera_pdf, pulisci_testo
+import json
+import io
+import re
+from PIL import Image
+from openai import OpenAI
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
-st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
+def pulisci_testo(testo):
+    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
+    if not testo or str(testo).strip() == "":
+        return ""
+    testo_pulito = str(testo).replace("_", " ")
+    testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
+    return testo_pulito.strip().upper()
 
-st.title("⚽ Centro Gestione Distinte Gara Gestionale")
-st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sulle liste.")
+def encode_image(uploaded_file):
+    """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
+    img = Image.open(uploaded_file)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    img.thumbnail((1600, 1600))
+    buffer_img = io.BytesIO()
+    img.save(buffer_img, format="JPEG", quality=85)
+    return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
-api_key_openai = st.secrets.get("OPENAI_API_KEY")
-
-if "griglia_casa" not in st.session_state:
-    st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
-if "griglia_ospite" not in st.session_state:
-    st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
-
-col_f1, col_f2 = st.columns(2)
-with col_f1:
-    st.subheader("🏠 Squadra in Casa")
-    file_casa = st.file_uploader("Carica distinta LOCALE", type=["png", "jpg", "jpeg"], key="casa")
-with col_f2:
-    st.subheader("🚀 Squadra Ospite")
-    file_ospite = st.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="ospite")
-
-if file_casa and file_ospite:
-    if "dati_mappati" not in st.session_state:
-        if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
-            with st.spinner("L'AI sta leggendo le distinte..."):
-                try:
-                    casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
-                    ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
-                    
-                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
-                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
-                    st.session_state["macro_info"] = {"campionato": casa_raw["campionato"], "data": casa_raw["data"], "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"], "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]}
-                    st.session_state["dati_mappati"] = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante l'analisi visiva: {e}")
-
-if "dati_mappati" in st.session_state:
-    st.markdown("---")
-    st.header("✏️ Fase 2: Controllo, Correzione e Funzioni di Shift")
+def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
+    """Invia la foto a OpenAI ed estrae i dati in formato JSON garantendo 20 righe strutturate"""
+    client = OpenAI(api_key=api_key)
+    base64_image = encode_image(uploaded_file)
     
-    info = st.session_state["macro_info"]
+    prompt_sistema = (
+        "Sei un assistente esperto di calcio LND. Il tuo compito è scansionare la griglia dei calciatori. "
+        "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
+        "{\n"
+        "  \"squadra\": \"Nome Squadra\",\n"
+        "  \"allenatore\": \"Cognome Nome\",\n"
+        "  \"data\": \"DD/MM/YYYY\",\n"
+        "  \"campionato\": \"Nome Campionato\",\n"
+        "  \"giocatori\": [\n"
+        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": \"2005\"}\n"
+        "  ]\n"
+        "}"
+    )
     
-    st.subheader("🏁 Informazioni Generali Match")
-    c_g1, c_g2 = st.columns(2)
-    with c_g1:
-        edit_campionato = st.text_input("🏆 Campionato / Categoria", value=info["campionato"])
-        edit_arbitro = st.text_input("🏁 Arbitro (Nome e Cognome)", value="")
-        edit_ass1 = st.text_input("🚩 Assistente 1", value="")
-    with c_g2:
-        edit_data = st.text_input("📅 Data Partita", value=info["data"])
-        st.write("")
-        edit_ass2 = st.text_input("🚩 Assistente 2", value="")
-        
-    st.markdown("---")
-    c_sq1, c_sq2 = st.columns(2)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={ "type": "json_object" },
+        messages=[
+            {"role": "system", "content": prompt_sistema},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Estrai l'elenco dei giocatori per la squadra {ruolo_squadra} in formato json."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }
+        ],
+        temperature=0.0
+    )
     
-    opzioni_righe = [i for i in range(1, 21)]
+    risultato_grezzo = response.choices.message.content.strip()
+    if risultato_grezzo.startswith("```"):
+        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
+        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
+        
+    dati = json.loads(risultato_grezzo)
     
-    # --- GESTIONE SQUADRA CASA ---
-    with c_sq1:
-        st.subheader("🏠 SQUADRA CASA")
-        edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
-        edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
-        
-        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
-        
-        riga_scelta_casa = st.selectbox("🎯 Seleziona N° riga su cui operare (Casa)", options=opzioni_righe, index=12)
-        c_btn1, c_btn2 = st.columns(2)
-        with c_btn1:
-            if st.button("⬇️ Slitta in basso (Casa)", key="shift_down_casa", use_container_width=True):
-                df = st.session_state["griglia_casa"].copy().reset_index()
-                idx = riga_scelta_casa - 1
-                nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx:19]
-                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                st.rerun()
-        with c_btn2:
-            if st.button("⬆️ Slitta in alto (Casa)", key="shift_up_casa", use_container_width=True):
-                df = st.session_state["griglia_casa"].copy().reset_index()
-                idx = riga_scelta_casa - 1
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                st.rerun()
-
-    # --- GESTIONE SQUADRA OSPITE ---
-    with c_sq2:
-        st.subheader("🚀 SQUADRA OSPITE")
-        edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
-        edit_all_ospite = st.text_input("Allenatore Ospite", value=info["all_ospite"])
-        
-        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, hide_index=False)
-        
-        riga_scelta_ospite = st.selectbox("🎯 Seleziona N° riga su cui operare (Ospite)", options=opzioni_righe, index=12)
-        o_btn1, o_btn2 = st.columns(2)
-        with o_btn1:
-            if st.button("⬇️ Slitta in basso (Ospite)", key="shift_down_ospite", use_container_width=True):
-                df = st.session_state["griglia_ospite"].copy().reset_index()
-                idx = riga_scelta_ospite - 1
-                nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx:19]
-                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                st.rerun()
-        with c_btn2:
-            if st.button("⬆️ Slitta in alto (Ospite)", key="shift_up_ospite", use_container_width=True):
-                df = st.session_state["griglia_ospite"].copy().reset_index()
-                idx = riga_scelta_ospite - 1
-                df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["N°"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                st.rerun()
-
-    # --- GENERAZIONE PDF FINALE ---
-    st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 definitivo..."):
-            try:
-                giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
-                giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
-                
-                squadra_casa_corretta = {
-                    "squadra": pulisci_testo(edit_nome_casa),
-                    "allenatore": pulisci_testo(edit_all_casa),
-                    "giocatori": giocatori_casa_salvati
+    dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
+    dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
+    dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
+    dati["data"] = pulisci_testo(dati.get("data", "NON INDICATO"))
+    
+    giocatori_estratti = {}
+    for g in dati.get("giocatori", []):
+        try:
+            num = int(g.get("numero", 0))
+            if 1 <= num <= 20:
+                giocatori_estratti[num] = {
+                    "cognome_nome": pulisci_testo(g.get("cognome_nome", "")),
+                    "anno_nascita": str(g.get("anno_nascita", ""))
                 }
-                squadra_ospite_corretta = {
-                    "squadra": pulisci_testo(edit_nome_ospite),
-                    "allenatore": pulisci_testo(edit_all_ospite),
-                    "giocatori": giocatori_ospite_salvati
-                }
-                info_gara_corrette = {
-                    "campionato": pulisci_testo(edit_campionato),
-                    "data": pulisci_testo(edit_data),
-                    "arbitro": pulisci_testo(edit_arbitro),
-                    "assistente1": pulisci_testo(edit_ass1),
-                    "assistente2": pulisci_testo(edit_ass2)
-                }
-                
-                pdf_url = "https://streamlit.io"
-                
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
-                qr.add_data(pdf_url)
-                qr.make(fit=True)
-                img_qr = qr.make_image(fill_color="black", back_color="white")
-                buf_qr = io.BytesIO()
-                img_qr.save(buf_qr, format="PNG")
-                qr_bytes = buf_qr.getvalue()
-                
-                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
-                st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
-                
-            except Exception as ex:
-                st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
+        except:
+            continue
+            
+    lista_20_giocatori = []
+    for i in range(1, 21):
+        if i in giocatori_estratti:
+            lista_20_giocatori.append({
+                "N°": i,
+                "GIOCATORE": giocatori_estratti[i]["cognome_nome"],
+                "ANNO": giocatori_estratti[i]["anno_nascita"]
+            })
+        else:
+            lista_20_giocatori.append({"N°": i, "GIOCATORE": "", "ANNO": ""})
+            
+    dati["giocatori"] = lista_20_giocatori
+    return dati
 
-if "pdf_interattivo_pronto" in st.session_state:
-    st.write("")
-    c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="💾 Scarica PDF per il Computer",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
+    """Genera il file PDF A4 con colonne affiancate e QR code integrato"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, leading=17, textColor=colors.HexColor("#1A365D"), spaceAfter=2)
+    info_style = ParagraphStyle('InfoStyle', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor("#2D3748"))
+    team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=10, leading=12, textColor=colors.HexColor("#2B6CB0"), spaceBefore=4, spaceAfter=2)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
+    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
+    qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=6.5, leading=8, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
+    
+    elementi_sinistra = [
+        Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style),
+        Spacer(1, 4)
+    ]
+    
+    tabella_info_dati = [
+        [Paragraph(f"<b>CAMPIONATO:</b> {pulisci_testo(info_gara['campionato'])}", info_style), Paragraph(f"<b>DATA GARA:</b> {pulisci_testo(info_gara['data'])}", info_style)],
+        [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
+        [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
+    ]
+    t_info = Table(tabella_info_dati, colWidths=[240, 240])
+    t_info.setStyle(TableStyle([
+        ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
+        ('TOPPADDING', (0,0), (-1,-1), 1.5),
+    ]))
+    elementi_sinistra.append(t_info)
+    
+    if qr_code_bytes:
+        buf_qr = io.BytesIO(qr_code_bytes)
+        img_qr_pdf = RLImage(buf_qr, width=50, height=50)
+        blocco_qr_dati = [
+            [img_qr_pdf],
+            [Paragraph("INQUADRA DA SMARTPHONE", qr_text_style)]
+        ]
+        t_blocco_qr = Table(blocco_qr_dati, colWidths=[70])
+        t_blocco_qr.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 1),
+        ]))
+        tabella_header_dati = [[elementi_sinistra, t_blocco_qr]]
+        t_header = Table(tabella_header_dati, colWidths=[480, 70])
+    else:
+        tabella_header_dati = [[elementi_sinistra, ""]]
+        t_header = Table(tabella_header_dati, colWidths=[550, 0])
+        
+    t_header.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('LINEBELOW', (0,0), (-1,-1), 1, colors.HexColor("#CBD5E0")),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(t_header)
+    story.append(Spacer(1, 4))
+    
+    def genera_tabella_squadra(dati, etichetta):
+        elementi_squadra = []
+        elementi_squadra.append(Paragraph(f"<b>{etichetta}</b>", team_title_style))
+        elementi_squadra.append(Paragraph(f"<b>{pulisci_testo(dati.get('squadra', 'N.D.'))}</b>", team_title_style))
+        elementi_squadra.append(Paragraph(f"<b>ALLENATORE:</b> {pulisci_testo(dati.get('allenatore', 'NON INDICATO'))}", normal_style))
+        elementi_squadra.append(Spacer(1, 3))
+        
+        tabella_dati = [[Paragraph("<b>N°</b>", bold_style), Paragraph("<b>GIOCATORE</b>", bold_style), Paragraph("<b>ANNO</b>", bold_style)]]
+        stili_celle = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1.8),
+            ('TOPPADDING', (0,0), (-1,-1), 1.8),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E0")),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]
+        
+        for index, g in enumerate(dati.get('giocatori', [])):
+            testo_num = Paragraph(str(g.get('N°', index + 1)), normal_style)
+            testo_nome = Paragraph(pulisci_testo(g.get('GIOCATORE', '')), normal_style)
+            testo_anno = Paragraph(str(g.get('ANNO', '')), normal_style)
+            tabella_dati.append([testo_num, testo_nome, testo_anno])
+            
+        t = Table(tabella_dati, colWidths=[25, 195, 45])
+        t.setStyle(TableStyle(stili_celle))
+        elementi_squadra.append(t)
+        return elementi_squadra
+
+    colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE (CASA)")
+    colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
+    
+    macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
+    macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
+    macro_tabella.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+    ]))
+    
+    story.append(macro_tabella)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
