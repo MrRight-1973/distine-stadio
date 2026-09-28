@@ -25,7 +25,7 @@ def encode_image(uploaded_file):
     return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra):
-    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON con pulizia automatica stringhe"""
+    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON con controllo errori di fatturazione"""
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
@@ -44,24 +44,41 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         "}"
     )
     
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={ "type": "json_object" },
-        messages=[
-            {"role": "system", "content": prompt_sistema},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": f"Estrai i dati in formato JSON per la squadra {ruolo_squadra} da questa immagine di distinta gara LND."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-                ]
-            }
-        ],
-        temperature=0.0
-    )
-    
-    # Estrazione sicura della stringa di testo della risposta
-    risultato_grezzo = response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={ "type": "json_object" },
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Estrai i dati in formato JSON per la squadra {ruolo_squadra} da questa immagine di distinta gara LND."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            temperature=0.0
+        )
+        
+        # Estrazione della stringa di testo della risposta
+        risultato_grezzo = response.choices[0].message.content
+        if not risultato_grezzo:
+            raise ValueError("OpenAI ha restituito una risposta vuota.")
+            
+        risultato_grezzo = risultato_grezzo.strip()
+        
+        # Rimuove eventuali blocchi markdown generati per errore
+        if risultato_grezzo.startswith("```"):
+            risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
+            risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
+            
+        return json.loads(risultato_grezzo)
+
+    except Exception as api_error:
+        # Se l'errore è legato ai soldi o ai limiti di OpenAI, lo intercettiamo chiaramente
+        st.error("🚨 Errore di comunicazione con OpenAI. Verifica di aver caricato il credito (almeno 5$) su ://openai.com e che la API Key sia corretta.")
+        raise api_error
     
     # FUNZIONE FAILSAFE: Rimuove eventuali blocchi markdown ```json ... ``` se generati per errore
     if risultato_grezzo.startswith("```"):
