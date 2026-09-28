@@ -1,5 +1,6 @@
 streamlit
-reportlab
-pillow
-qrcode
+opencv-python-headless
 pytesseract
+Pillow
+qrcode
+reportlab
