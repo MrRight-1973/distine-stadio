@@ -1,5 +1,6 @@
 streamlit
 pytesseract
 Pillow
-qrcode
+pandas
 reportlab
+qrcode[pil]
