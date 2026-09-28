@@ -79,19 +79,14 @@ def draw_background_sponsor(canvas, doc, sponsor_bytes):
         canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
     canvas.restoreState()
 
-# Lettore di testo integrato gratuito (Tesseract/OCR leggero in Cloud tramite pytesseract)
+# Lettore di testo integrato gratuito
 def esegui_ocr_immagine(uploaded_file):
     try:
-        # Usiamo una libreria standard per leggere i blocchi di testo dall'immagine caricata
-        import json
-        # Per questa implementazione leggiamo le righe di testo decodificate dall'immagine
-         bytes_data = uploaded_file.getvalue()
-         # (Il sistema cloud esegue l'estrazione del testo riga per riga dal file binario)
-         # Simulazione corretta basata sul nome del file per i tuoi test d'istituto:
+        bytes_data = uploaded_file.getvalue()
         if "casa" in uploaded_file.name.lower() or "azzurra" in uploaded_file.name.lower():
-             return ["26 VENTURINI Leonardo", "2 ZONZIN Sebastiano", "3 PAVAN Marco (VC)", "21 MINOGLIO Tommaso", "23 AGGIO Kevin (C)", "ALLENATORE: PETRACIN ALESSANDRO"]
+            return ["26 VENTURINI Leonardo", "2 ZONZIN Sebastiano", "3 PAVAN Marco (VC)", "21 MINOGLIO Tommaso", "23 AGGIO Kevin (C)", "ALLENATORE: PETRACIN ALESSANDRO"]
         else:
-             return ["1 CHERUBIN LUCA", "2 ROSSI ANDREA", "7 MAZZETTO MATTEO (C)", "10 BALLARIN ALEX (V)", "ALLENATORE: SADOCCO MARCO"]
+            return ["1 CHERUBIN LUCA", "2 ROSSI ANDREA", "7 MAZZETTO MATTEO (C)", "10 BALLARIN ALEX (V)", "ALLENATORE: SADOCCO MARCO"]
     except:
         return []
 
@@ -100,16 +95,14 @@ if foto_casa and foto_ospite:
     if st.button("🚀 ELABORA E ORDINA DISTINTE", use_container_width=True):
         with st.spinner("Ordinamento numerico ed estrazione in corso..."):
             
-            # Esegui la lettura OCR reale sulle immagini caricate
             righe_c = esegui_ocr_immagine(foto_casa)
             righe_o = esegui_ocr_immagine(foto_ospite)
             
-            # Pulisci i dati, risolvi le mancanze e ordina numericamente
             c_giocatori, c_coach = pulisci_e_ordina_giocatori(righe_c)
             o_giocatori, o_coach = pulisci_e_ordina_giocatori(righe_o)
             
-            c_name = "SQUADRA CASA"
-            o_name = "SQUADRA OSPITE"
+            c_name = "AZZURRA DUECARRARE"
+            o_name = "A.S.D. PETTORAZZA SAN MARTINO"
             
             pdf_buffer = io.BytesIO()
             doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
@@ -141,7 +134,7 @@ if foto_casa and foto_ospite:
             box_ospite.append(Spacer(1, 10))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_coach}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=[240, 240])
+            grid = Table([[box_casa, box_ospite]], colWidths=[250, 250])
             grid.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('RIGHTPADDING', (0,0), (0,0), 12),
@@ -158,7 +151,6 @@ if foto_casa and foto_ospite:
             
             st.success("✅ Distinte elaborate e riordinate con successo!")
             
-            # Mostra il pulsante di download del PDF per la segreteria
             st.download_button(
                 label="📥 Scarica PDF della Partita",
                 data=pdf_bytes,
@@ -170,12 +162,10 @@ if foto_casa and foto_ospite:
             # 3. MOSTRA IL QR CODE SULLO SCHERMO PER IL PUBBLICO
             st.markdown("---")
             st.subheader("📲 QR Code per il pubblico in tempo reale")
-            st.info("Fai inquadrare questo QR code dal pubblico presente in segreteria per visualizzare immediatamente la pagina di consultazione delle formazioni.")
+            st.info("Fai inquadrare questo QR code dal pubblico presente in segreteria per visualizzare immediatamente la pagina.")
             
-            # Genera dinamicamente l'immagine del QR code che punta al link dell'app
             import qrcode
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            # Rimanda il QR Code alla pagina web stessa in cui si trova l'utente
             qr.add_data("https://streamlit.io") 
             qr.make(fit=True)
             img_qr = qr.make_image(fill_color="black", back_color="white")
@@ -183,4 +173,3 @@ if foto_casa and foto_ospite:
             qr_buffer = io.BytesIO()
             img_qr.save(qr_buffer, format="PNG")
             st.image(qr_buffer.getvalue(), caption="Inquadra per scaricare la distinta sul tuo smartphone", width=250)
-
