@@ -1,4 +1,2 @@
 streamlit
-pytesseract
-pillow
-fpdf2
+openai
