@@ -23,7 +23,7 @@ file_caricato = st.file_uploader("Trascina qui la foto della distinta o selezion
 
 if file_caricato is not None:
     # Mostra l'anteprima dell'immagine caricata nella Web App
-    st.image(file_caricato, caption="Distinta caricata correttamente", use_column_width=True)
+    st.image(file_caricato, caption="Distinta caricata correttamente", use_container_width=True)
     
     # Pulsante per avviare l'elaborazione
     if st.button("🚀 Estrai Giocatori"):
