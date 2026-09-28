@@ -60,7 +60,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices.message.content.strip()
+    risultato_grezzo = response.choices[0].message.content
     
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
