@@ -163,33 +163,38 @@ if "dati_mappati" in st.session_state:
                 # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
                 pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 2. Carica il PDF online tramite server specifici per API (0x0.st o ix.io)
+                # 2. Carica il PDF online tramite filebin.net (Server ultra-stabile e simultaneo)
                 url_pubblico = "https://google.com" # Fallback globale
                 caricato_con_successo = False
                 
                 try:
-                    # Prepariamo il file in formato multipart
-                    files = {'file': (f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf", pdf_bozza, 'application/pdf')}
+                    # Filebin richiede di definire un "bin" (un contenitore) univoco, creiamolo con la data e un codice casuale
+                    import random
+                    id_partita = f"distinta_{info_gara_corrette['data'].replace('/', '_')}_{random.randint(1000, 9999)}".lower()
+                    nome_file = f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf"
                     
-                    # TENTATIVO 1: Server ultra-stabile per sviluppatori (0x0.st)
-                    response_upload = requests.post("https://0x0.st", files=files, timeout=8)
+                    # URL di upload diretto per il filebin
+                    upload_url = f"https://filebin.net{id_partita}/{nome_file}"
                     
-                    if response_upload.status_code == 200:
-                        url_pubblico = response_upload.text.strip()
+                    # Inviamo i byte crudi del PDF tramite richiesta PUT (standard per filebin)
+                    headers = {"Content-Type": "application/pdf"}
+                    response_upload = requests.put(upload_url, data=pdf_bozza, headers=headers, timeout=10)
+                    
+                    if response_upload.status_code in:
+                        # L'URL di download diretto per gli spettatori sarà questo:
+                        url_pubblico = f"https://filebin.net{id_partita}/{nome_file}"
                         caricato_con_successo = True
                     else:
-                        # TENTATIVO 2 (RISERVA): Se il primo fallisce, proviamo ix.io
-                        pdf_bozza.seek(0) # Resetta il buffer per la rilettura
-                        payload_ix = {'f:1': pdf_bozza.getvalue()}
+                        st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Tento fallback rapido...")
+                        # Fallback integrato su ix.io (senza chiamare .seek())
+                        payload_ix = {'f:1': pdf_bozza}
                         response_ix = requests.post("http://ix.io", data=payload_ix, timeout=8)
                         if response_ix.status_code == 200:
                             url_pubblico = response_ix.text.strip()
                             caricato_con_successo = True
-                        else:
-                            st.warning(f"Server primario (codice {response_upload.status_code}) e di riserva falliti.")
                             
                 except Exception as e_upload:
-                    st.warning(f"Errore di rete durante il caricamento cloud: {e_upload}. Genero comunque il PDF locale.")
+                    st.warning(f"Errore durante il caricamento cloud: {e_upload}. Genero comunque il PDF locale.")
 
                 # 3. Genera il QR Code contenente l'URL risultante
                 qr = qrcode.QRCode(version=1, box_size=10, border=1)
