@@ -59,7 +59,7 @@ if file_caricato is not None:
                 )
                 
                 # Elaborazione del risultato JSON
-                risultato_testo = response.choices.message.content
+                risultato_testo = response.choices[0].message.content
                 dati_json = json.loads(risultato_testo)
                 lista_giocatori = dati_json.get("giocatori", [])
                 
