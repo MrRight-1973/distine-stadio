@@ -1,82 +1,84 @@
 import streamlit as st
-import json
-import os
-import time
-from google import genai
-from google.genai import types
-from google.genai.errors import APIError
+import pytesseract
+import re
 from PIL import Image
-from pydantic import BaseModel, Field
-from typing import List, Optional
 from fpdf import FPDF
 
-# Configurazione iniziale della pagina di Streamlit
-st.set_page_config(page_title="Estrattore Distinte Calcio", page_icon="⚽", layout="wide")
+# Configurazione della pagina Streamlit
+st.set_page_config(page_title="Estrattore Distinte PC", page_icon="⚽", layout="wide")
 
-# Schema dei dati strutturati richiesti a Gemini tramite Pydantic
-class Giocatore(BaseModel):
-    numero: int = Field(description="Numero progressivo o di maglia nella distinta")
-    nome: str = Field(description="Cognome e Nome del giocatore")
-    anno_nascita: int = Field(description="Anno di nascita a 4 cifre del giocatore")
-    ruolo_speciale: Optional[str] = Field(None, description="Indica se Capitano (C) o Vice Capitano (V)")
-
-class SquadraDati(BaseModel):
-    nome_squadra: str = Field(description="Nome della squadra calcistica")
-    allenatore: str = Field(description="Nome dell'allenatore principale")
-    allenatore_seconda: Optional[str] = Field(None, description="Nome dell'allenatore in seconda, se presente")
-    giocatori: List[Giocatore]
-
-# Funzione per interrogare Gemini con gestione dei tentativi di rete (Anti-503)
-def analizza_distinta_con_ia(immagine_pil, client):
-    prompt = (
-        "Analizza questa immagine di una distinta di gara di calcio. "
-        "Estrai accuratamente il nome della squadra, il nome dell'allenatore, "
-        "l'allenatore in seconda (se presente) e la lista di tutti i giocatori "
-        "con il loro anno di nascita (calcolato o letto dalla data di nascita) "
-        "e l'eventuale ruolo di capitano/vice."
-    )
+def analizza_testo_stampato(testo_grezzo):
+    """Sfrutta la formattazione pulita del PC per dividere i dati"""
+    squadra_dati = {
+        "nome_squadra": "Squadra Rilevata",
+        "allenatore": "Non rilevato",
+        "allenatore_seconda": None,
+        "giocatori": []
+    }
     
-    # Utilizziamo il modello stabile di generazione corrente
-    modello_attivo = 'gemini-3.8-flash'
-    massimi_tentativi = 3
+    linee = [linea.strip() for linea in testo_grezzo.split('\n') if linea.strip()]
+    giocatori_temporanei = []
     
-    for tentativo in range(massimi_tentativi):
-        try:
-            response = client.models.generate_content(
-                model=modello_attivo,
-                contents=[immagine_pil, prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=SquadraDati,
-                    temperature=0.1  # Massima precisione nell'estrazione dei dati
-                ),
-            )
-            return json.loads(response.text)
+    for i, linea in enumerate(linee):
+        linea_lower = linea.lower()
+        
+        # 1. Trova l'allenatore
+        if "allenatore" in linea_lower or "all." in linea_lower or "mr." in linea_lower:
+            pope_all = linea.split(':')[-1].strip() if ':' in linea else linea
+            if len(pope_all) > 3 and "allenatore" not in pope_all.lower():
+                if squadra_dati["allenatore"] == "Non rilevato":
+                    squadra_dati["allenatore"] = pope_all
+                else:
+                    squadra_dati["allenatore_seconda"] = pope_all
+            continue
             
-        except APIError as e:
-            # Gestione errore 503 (Server sovraccarico): aspetta e riprova
-            if e.code == 503 and tentativo < massimi_tentativi - 1:
-                time.sleep(2)
-                continue
-            else:
-                raise e
-        except Exception as e:
-            raise e
-            
-    raise Exception("I server di Google sono temporaneamente occupati dal traffico. Riprova tra pochi istanti.")
+        # 2. Trova il nome della squadra (solitamente in cima e in maiuscolo)
+        if i < 3 and len(linea) > 5 and linea.isupper() and "DISTINTA" not in linea:
+            squadra_dati["nome_squadra"] = linea
 
-# Classe per la strutturazione grafica del documento PDF tabellare
+        # 3. Estrazione dei giocatori cercando l'anno di nascita a 4 cifre
+        anno_match = re.search(r'\b(19\d{2}|20\d{2})\b', linea)
+        
+        ruolo = None
+        if "(c)" in linea_lower or "capitano" in linea_lower:
+            ruolo = "(C)"
+        elif "(v)" in linea_lower or "vice" in linea_lower:
+            ruolo = "(V)"
+            
+        if anno_match:
+            anno = int(anno_match.group(1))
+            # Pulisce la riga per tenere solo il nome del giocatore
+            nome_pulito = linea.replace(str(anno), '')
+            nome_pulito = re.sub(r'\b\d{1,2}\b', '', nome_pulito) # Rimuove numeri di maglia isolati
+            nome_pulito = re.sub(r'[^\w\s]', '', nome_pulito).strip() # Rimuove simboli residui
+            
+            if len(nome_pulito) > 3:
+                giocatori_temporanei.append({
+                    "nome": nome_pulito,
+                    "anno_nascita": anno,
+                    "ruolo_speciale": ruolo
+                })
+
+    # Assegna numerazione progressiva ordinata
+    for idx, g in enumerate(giocatori_temporanei, 1):
+        squadra_dati["giocatori"].append({
+            "numero": idx,
+            "nome": g["nome"],
+            "anno_nascita": g["anno_nascita"],
+            "ruolo_speciale": g["ruolo_speciale"]
+        })
+        
+    return squadra_dati
+
+# Struttura grafica del PDF finale scaricabile
 class PDFReport(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 16)
-        self.set_text_color(31, 41, 55)
-        self.cell(0, 10, "REPORT DISTINTE DI GARA", ln=True, align="C")
+        self.cell(0, 10, "REPORT AUTOMATICO DISTINTE", ln=True, align="C")
         self.ln(5)
-        
     def footer(self):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
-        self.set_text_color(156, 163, 175)
         self.cell(0, 10, f"Pagina {self.page_no()}", align="C")
 
 def genera_pdf(dati_squadre):
@@ -86,7 +88,7 @@ def genera_pdf(dati_squadre):
     
     for sq in dati_squadre:
         pdf.set_font("Helvetica", "B", 14)
-        pdf.set_text_color(29, 78, 216) # Titolo blu della squadra
+        pdf.set_text_color(29, 78, 216) # Colore Blu per la squadra
         pdf.cell(0, 10, sq["nome_squadra"].upper(), ln=True)
         
         pdf.set_font("Helvetica", "", 10)
@@ -95,16 +97,16 @@ def genera_pdf(dati_squadre):
         pdf.cell(0, 6, f"Allenatore: {sq['allenatore']}{all_2}", ln=True)
         pdf.ln(4)
         
-        # Intestazione della tabella
+        # Tabella intestazione
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_fill_color(243, 244, 246)
         pdf.cell(15, 7, "N°", border=1, fill=True, align="C")
         pdf.cell(100, 7, "Cognome e Nome", border=1, fill=True)
-        pdf.cell(40, 7, "Anno di Nascita", border=1, fill=True, align="C")
+        pdf.cell(40, 7, "Anno Nascita", border=1, fill=True, align="C")
         pdf.cell(30, 7, "Note", border=1, fill=True, align="C")
         pdf.ln()
         
-        # Riempimento dei dati estratti
+        # Righe Giocatori
         pdf.set_font("Helvetica", "", 10)
         for g in sq["giocatori"]:
             ruolo = g.get("ruolo_speciale") if g.get("ruolo_speciale") else ""
@@ -113,56 +115,49 @@ def genera_pdf(dati_squadre):
             pdf.cell(40, 7, str(g["anno_nascita"]), border=1, align="C")
             pdf.cell(30, 7, ruolo, border=1, align="C")
             pdf.ln()
-            
         pdf.ln(10)
-        
     return pdf.output()
 
-# --- INTERFACCIA STREAMLIT UTENTE ---
-st.title("⚽ Estrattore Automatico Distinte Calcio")
-st.write("Carica le due immagini delle distinte per generare un unico report PDF strutturato.")
+# --- INTERFACCIA STREAMLIT ---
+st.title("⚽ Estrattore Distinte Gratuito e Illimitato")
+st.write("Sviluppato specificatamente per fogli stampati al PC. Nessun costo, nessuna chiave API, privacy garantita.")
 
-# Recupero della chiave API protetta tramite st.secrets
-api_key = st.secrets.get("GEMINI_API_KEY")
-
-if not api_key:
-    st.error("⚠️ Chiave API 'GEMINI_API_KEY' non trovata nei Secrets di Streamlit. Configurala nel pannello di controllo dell'app cloud.")
-else:
-    client = genai.Client(api_key=api_key)
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Distinta Squadra Casa")
+    file1 = st.file_uploader("Carica modulo Casa", type=["png", "jpg", "jpeg"], key="c1")
+with col2:
+    st.subheader("Distinta Squadra Ospite")
+    file2 = st.file_uploader("Carica modulo Ospite", type=["png", "jpg", "jpeg"], key="o1")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Distinta Squadra 1")
-        file1 = st.file_uploader("Scegli la prima immagine", type=["png", "jpg", "jpeg"], key="f1")
-    with col2:
-        st.subheader("Distinta Squadra 2")
-        file2 = st.file_uploader("Scegli la seconda immagine", type=["png", "jpg", "jpeg"], key="f2")
+if file1 and file2:
+    if st.button("🚀 Elabora e Genera PDF", type="primary"):
+        risultati = []
+        errore = False
         
-    if file1 and file2:
-        if st.button("🚀 Analizza Distinte e Genera PDF", type="primary"):
-            risultati = []
-            errore_riscontrato = False
-            
-            with st.spinner("L'intelligenza artificiale sta leggendo le immagini..."):
-                for i, file_caricato in enumerate([file1, file2], 1):
-                    try:
-                        img = Image.open(file_caricato)
-                        dati_squadra = analizza_distinta_con_ia(img, client)
-                        risultati.append(dati_squadra)
-                        st.success(f"✅ Analizzata: {dati_squadra['nome_squadra']}")
-                    except Exception as e:
-                        st.error(f"❌ Errore durante l'analisi della distinta {i}: {str(e)}")
-                        errore_riscontrato = True
-                        
-            if not errore_riscontrato and len(risultati) == 2:
+        with st.spinner("Lettura digitalizzata dei fogli in corso..."):
+            for i, file_caricato in enumerate([file1, file2], 1):
                 try:
-                    pdf_bytes = genera_pdf(risultati)
-                    st.write("")
-                    st.download_button(
-                        label="📥 Scarica il Report PDF",
-                        data=pdf_bytes,
-                        file_name="report_distinte_gara.pdf",
-                        mime="application/pdf"
-                    )
+                    img = Image.open(file_caricato)
+                    # Converte l'immagine in testo usando il dizionario italiano
+                    testo_estratto = pytesseract.image_to_string(img, lang='ita')
+                    
+                    dati_squadra = analizza_testo_stampato(testo_estratto)
+                    if dati_squadra["nome_squadra"] == "Squadra Rilevata":
+                        dati_squadra["nome_squadra"] = f"Squadra {i}"
+                        
+                    risultati.append(dati_squadra)
+                    st.success(f"✅ Letta con successo Distinta {i}")
                 except Exception as e:
-                    st.error(f"Errore nella compilazione grafica del file PDF: {e}")
+                    st.error(f"Errore sul file {i}: {e}")
+                    errore = True
+                    
+        if not errore and len(risultati) == 2:
+            pdf_bytes = genera_pdf(risultati)
+            st.write("")
+            st.download_button(
+                label="📥 Scarica il Report PDF della Partita",
+                data=pdf_bytes,
+                file_name="report_partita.pdf",
+                mime="application/pdf"
+              )
