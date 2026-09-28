@@ -84,7 +84,6 @@ def formatta_riga_ocr_inclusiva(testo_grezzo):
     
     parole = testo_puro.split()
     if len(parole) >= 1:
-        # Trasforma la prima parola in tutto MAIUSCOLO (Cognome) e il resto in iniziale maiuscola (Nome)
         cognome = parole[0].upper()
         nome = " ".join(parole[1:]).title() if len(parole) > 1 else ""
         
@@ -123,7 +122,6 @@ def esegui_ocr_foto_inclusivo(uploaded_file):
                 continue
                 
             testo_formattato = formatta_riga_ocr_inclusiva(riga_clean)
-            # Evita l'inserimento di scritte istituzionali del modulo
             if testo_formattato and not any(x in testo_formattato.upper() for x in ["DIRIGENTE", "MEDICO", "MASSAGGIATORE", "TESSERA", "ASSISTENTE"]):
                 if testo_formattato not in giocatori:
                     giocatori.append(testo_formattato)
@@ -132,7 +130,8 @@ def esegui_ocr_foto_inclusivo(uploaded_file):
         
     while len(giocatori) < 20:
         giocatori.append("")
-    return jugadores[:20], all_nome.title(), squadra_nome
+    # RISOLTO: Sostituito 'jugadores' con 'giocatori'
+    return giocatori[:20], all_nome.title(), squadra_nome
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
