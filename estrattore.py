@@ -9,6 +9,15 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
+def pulisci_testo(testo):
+    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
+    if not testo:
+        return ""
+    # Sostituisce i trattini bassi con uno spazio e rimuove gli spazi doppi
+    testo_pulito = testo.replace("_", " ")
+    testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
+    return testo_pulito.strip().upper()
+
 def encode_image(uploaded_file):
     """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
     img = Image.open(uploaded_file)
@@ -20,7 +29,7 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto ottimizzata a OpenAI ed estrae i dati strutturati garantendo il formato"""
+    """Invia la foto a OpenAI ed estrae i dati strutturati includendo data e campionato"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
@@ -29,11 +38,15 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         "Devi estrarre obbligatoriamente:\n"
         "1. Il NOME DELLA SQUADRA.\n"
         "2. Il NOME E COGNOME DELL'ALLENATORE.\n"
-        "3. La lista di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita'.\n\n"
+        "3. La DATA DELLA PARTITA (cerca in alto nel foglio).\n"
+        "4. Il CAMPIONATO o CATEGORIA (es. Promozione, Prima Categoria, Eccellenza).\n"
+        "5. La lista di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita'.\n\n"
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
         "  \"allenatore\": \"Cognome Nome\",\n"
+        "  \"data\": \"DD/MM/YYYY\",\n"
+        "  \"campionato\": \"Nome Campionato\",\n"
         "  \"giocatori\": [\n"
         "    {\"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": 2005}\n"
         "  ]\n"
@@ -56,7 +69,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content
+    risultato_grezzo = response.choices.message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
@@ -65,35 +78,66 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
         risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
         
-    return json.loads(risultato_grezzo)
+    dati = json.loads(risultato_grezzo)
+    
+    # Applicazione della pulizia testo e MAIUSCOLO su tutti i dati estratti dall'AI
+    dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
+    dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
+    dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
+    dati["data"] = pulisci_testo(dati.get("data", "NON INDICATO"))
+    
+    for g in dati.get("giocatori", []):
+        g["cognome_nome"] = pulisci_testo(g.get("cognome_nome", ""))
+        
+    return dati
 
-def genera_pdf(casa, ospite):
-    """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate"""
+def genera_pdf(casa, ospite, info_gara):
+    """Genera il file PDF formattato in un unico foglio A4 con intestazione completa della partita"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#1A365D"), alignment=1, spaceAfter=10)
-    team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=5, spaceAfter=3)
-    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8.5, leading=10)
-    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8.5, leading=10, fontName="Helvetica-Bold")
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, leading=17, textColor=colors.HexColor("#1A365D"), alignment=1, spaceAfter=8)
+    info_style = ParagraphStyle('InfoStyle', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor("#2D3748"))
+    team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=10, leading=12, textColor=colors.HexColor("#2B6CB0"), spaceBefore=4, spaceAfter=2)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
+    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     
-    story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE</b>", title_style))
-    story.append(Spacer(1, 5))
+    # 1. Intestazione del Foglio A4
+    story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style))
     
+    # Tabella delle informazioni della partita (Data, Campionato e Terna Arbitrale)
+    data_partita = info_gara["data"] if info_gara["data"] else casa.get("data", "NON INDICATA")
+    camp_partita = info_gara["campionato"] if info_gara["campionato"] else casa.get("campionato", "NON INDICATO")
+    
+    tabella_info_dati = [
+        [Paragraph(f"<b>CAMPIONATO:</b> {pulisci_testo(camp_partita)}", info_style), Paragraph(f"<b>DATA GARA:</b> {pulisci_testo(data_partita)}", info_style)],
+        [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
+        [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
+    ]
+    t_info = Table(tabella_info_dati, colWidths=)
+    t_info.setStyle(TableStyle([
+        ('LINEBELOW', (0,-1), (-1,-1), 1, colors.HexColor("#CBD5E0")),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+    ]))
+    story.append(t_info)
+    story.append(Spacer(1, 6))
+    
+    # 2. Generazione delle liste delle due squadre
     def genera_tabella_squadra(dati, etichetta):
         elementi_squadra = []
         elementi_squadra.append(Paragraph(f"<b>{etichetta}</b>", team_title_style))
-        elementi_squadra.append(Paragraph(f"<b>{dati.get('squadra', 'N.D.').upper()}</b>", team_title_style))
-        elementi_squadra.append(Paragraph(f"<b>All:</b> {dati.get('allenatore', 'Non indicato')}", normal_style))
-        elementi_squadra.append(Spacer(1, 4))
+        elementi_squadra.append(Paragraph(f"<b>{dati.get('squadra', 'N.D.')}</b>", team_title_style))
+        elementi_squadra.append(Paragraph(f"<b>ALLENATORE:</b> {dati.get('allenatore', 'NON INDICATO')}", normal_style))
+        elementi_squadra.append(Spacer(1, 3))
         
-        tabella_dati = [[Paragraph("<b>Giocatore</b>", bold_style), Paragraph("<b>Anno</b>", bold_style)]]
+        tabella_dati = [[Paragraph("<b>GIOCATORE</b>", bold_style), Paragraph("<b>ANNO</b>", bold_style)]]
         stili_celle = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-            ('TOPPADDING', (0,0), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1.8),
+            ('TOPPADDING', (0,0), (-1,-1), 1.8),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E0")),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ]
@@ -103,16 +147,16 @@ def genera_pdf(casa, ospite):
             testo_anno = Paragraph(str(g['anno_nascita']), normal_style)
             tabella_dati.append([testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[180, 40])
+        t = Table(tabella_dati, colWidths=)
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
 
-    colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE")
+    colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE (CASA)")
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
+    macro_tabella = Table(macro_tabella_dati, colWidths=)
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
