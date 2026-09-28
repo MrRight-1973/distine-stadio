@@ -14,7 +14,7 @@ import pytesseract
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione FOTO reale, correzione a schermo e stampa A4</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione FOTO totale, pannello di correzione e stampa A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -56,55 +56,62 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def formatta_grafica_conservativa(testo_grezzo):
-    """Formatta la riga in COGNOME Nome ('Anno) senza distruggere lettere importanti o tag di capitano"""
+def formatta_riga_ocr_inclusiva(testo_grezzo):
+    """Estrae e protegge qualsiasi blocco di testo utile letto sulla foto cartacea"""
     testo_grezzo = testo_grezzo.strip()
-    if not testo_grezzo:
+    if len(testo_grezzo) < 3:
         return ""
         
-    # Isola l'anno di nascita prima di ripulire (2 cifre finali o staccate)
+    # Isola l'anno di nascita (2 cifre consecutive nell'intervallo tipico dei calciatori)
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
-    # Isola e protegge i tag Capitano e Vice
+    # Isola i ruoli di Capitano e Vice prima di pulire i simboli
     ruolo = ""
-    if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
-    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC "]): ruolo = " (VC)"
-    
-    # Rimuove solo i lunghi numeri di tessera FIGC (4 o più cifre consecutive) per non toccare i nomi brevi
+    if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper() or "  C  " in testo_grezzo.upper(): 
+        ruolo = " (C)"
+    elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): 
+        ruolo = " (VC)"
+        
+    # Rimuove solo i lunghi numeri di tessera o codici a barre della FIGC
     testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
-    # Rimuove l'eventuale numero di maglia iniziale letto nella colonna di sinistra
+    # Rimuove la vecchia numerazione iniziale della riga
     testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
     
-    # Elimina i vecchi simboli per evitare duplicati
-    testo_puro = testo_puro.replace("(C)", "").replace("(VC)", "").replace("(V)", "").strip()
+    # Pulisce dai caratteri speciali ma tiene intatte tutte le lettere dell'alfabeto
+    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
+    testo_puro = testo_puro.replace("C", "").replace("VC", "").replace("V", "").strip()
     
-    # Divide le parole per mettere il Cognome in MAIUSCOLO e il Nome in minuscolo
-    parole = [p for p in testo_puro.split() if p.upper() not in ["C", "VC", "V", "DIRIGENTE", "MEDICO"]]
-    if len(parole) >= 2:
-        cognome = parole.upper()
-        nome = " ".join(parole[1:]).title()
-        res = f"{cognome} {nome}{ruolo}"
-        return f"{res} ({anno})" if anno else res
-    elif len(parole) == 1:
-        res = parole.upper() + ruolo
-        return f"{res} ({anno})" if anno else res
+    parole = testo_puro.split()
+    if len(parole) >= 1:
+        # Trasforma la prima parola in tutto MAIUSCOLO (Cognome) e il resto in iniziale maiuscola (Nome)
+        cognome = parole[0].upper()
+        nome = " ".join(parole[1:]).title() if len(parole) > 1 else ""
+        
+        risultato_anagrafica = f"{cognome} {nome}".strip()
+        if risultato_anagrafica:
+            res_finale = f"{risultato_anagrafica}{ruolo}"
+            return f"{res_finale} ({anno})" if anno else res_finale
+            
     return ""
 
-def esegui_ocr_foto_reale(uploaded_file):
-    """Sfrutta il motore Tesseract integrato nel server Linux di Streamlit per leggere la foto"""
+def esegui_ocr_foto_inclusivo(uploaded_file):
+    """Scansiona l'immagine ed estrae ogni riga di testo utile senza scartare nulla"""
     giocatori = []
     all_nome = "Non rilevato"
     squadra_nome = "SQUADRA RILEVATA"
     try:
         img = Image.open(uploaded_file)
-        # Esegue la scansione in lingua italiana utilizzando i dizionari di packages.txt
+        # Ottimizzazione dell'immagine per Tesseract (aumento contrasto per fogli in ombra)
+        img = img.convert('L')
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+        
         testo = pytesseract.image_to_string(img, lang='ita')
         righe = testo.split('\n')
         
         for riga in righe:
             riga_clean = riga.strip()
-            if len(riga_clean) < 4 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO"]):
+            if len(riga_clean) < 3 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO", "SOCIETA"]):
                 continue
                 
             if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
@@ -115,23 +122,25 @@ def esegui_ocr_foto_reale(uploaded_file):
                 squadra_nome = riga_clean.upper().strip()
                 continue
                 
-            testo_formattato = formatta_grafica_conservativa(riga_clean)
-            if testo_formattato and len(giocatori) < 20:
-                giocatori.append(testo_formattato)
+            testo_formattato = formatta_riga_ocr_inclusiva(riga_clean)
+            # Evita l'inserimento di scritte istituzionali del modulo
+            if testo_formattato and not any(x in testo_formattato.upper() for x in ["DIRIGENTE", "MEDICO", "MASSAGGIATORE", "TESSERA", "ASSISTENTE"]):
+                if testo_formattato not in giocatori:
+                    giocatori.append(testo_formattato)
     except:
         pass
         
     while len(giocatori) < 20:
         giocatori.append("")
-    return giocatori[:20], all_nome.title(), squadra_nome
+    return jugadores[:20], all_nome.title(), squadra_nome
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
-        with st.spinner("Il motore Tesseract sta estraendo i caratteri dalle immagini..."):
-            g_casa, a_casa, name_casa = esegui_ocr_foto_reale(foto_casa)
-            g_ospite, a_ospite, name_ospite = esegui_ocr_foto_reale(foto_ospite)
+        with st.spinner("Il motore Tesseract sta eseguendo la mappatura completa dei pixel testuali..."):
+            g_casa, a_casa, name_casa = esegui_ocr_foto_inclusivo(foto_casa)
+            g_ospite, a_ospite, name_ospite = esegui_ocr_foto_inclusivo(foto_ospite)
             
-            # Algoritmo di scambio automatico: se la segreteria inverte l'ordine delle foto, l'app sistema le colonne
+            # Scambio automatico se la segreteria inverte l'ordine dei moduli cartacei
             if "pettorazza" in foto_casa.name.lower() or "ospite" in foto_casa.name.lower():
                 st.session_state.casa_giocatori_input = g_ospite
                 st.session_state.casa_all_input = a_ospite
