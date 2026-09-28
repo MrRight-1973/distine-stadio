@@ -25,7 +25,7 @@ def encode_image(uploaded_file):
     return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra):
-    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON con controllo errori di fatturazione"""
+    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON con controllo errori"""
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
@@ -61,14 +61,14 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
             temperature=0.0
         )
         
-        # Estrazione della stringa di testo della risposta
+        # Estrazione corretta e sicura prendendo il primo elemento della lista delle risposte [0]
         risultato_grezzo = response.choices[0].message.content
         if not risultato_grezzo:
-            raise ValueError("OpenAI ha restituito una risposta vuota.")
+            raise ValueError("OpenAI ha risposto senza includere testo utile.")
             
         risultato_grezzo = risultato_grezzo.strip()
         
-        # Rimuove eventuali blocchi markdown generati per errore
+        # Rimuove eventuali blocchi markdown generati per errore dall'AI
         if risultato_grezzo.startswith("```"):
             risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
             risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
@@ -76,16 +76,8 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         return json.loads(risultato_grezzo)
 
     except Exception as api_error:
-        # Se l'errore è legato ai soldi o ai limiti di OpenAI, lo intercettiamo chiaramente
-        st.error("🚨 Errore di comunicazione con OpenAI. Verifica di aver caricato il credito (almeno 5$) su ://openai.com e che la API Key sia corretta.")
+        st.error("🚨 Errore di comunicazione con OpenAI. Verifica che la API Key nei 'Secrets' sia corretta e che ci sia credito disponibile (almeno 5$) sul tuo account Platform OpenAI.")
         raise api_error
-    
-    # FUNZIONE FAILSAFE: Rimuove eventuali blocchi markdown ```json ... ``` se generati per errore
-    if risultato_grezzo.startswith("```"):
-        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
-        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
-        
-    return json.loads(risultato_grezzo)
 
 def genera_pdf(casa, ospite):
     """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate"""
@@ -94,7 +86,7 @@ def genera_pdf(casa, ospite):
     story = []
     styles = getSampleStyleSheet()
     
-    # Stili super compatti per evitare il passaggio alla seconda pagina
+    # Stili compatti studiati per proteggere l'altezza del foglio unico A4
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#1A365D"), alignment=1, spaceAfter=10)
     team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=5, spaceAfter=3)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8.5, leading=10)
@@ -114,7 +106,7 @@ def genera_pdf(casa, ospite):
         for g in dati.get('giocatori', []):
             tabella_dati.append([Paragraph(g['cognome_nome'], normal_style), Paragraph(str(g['anno_nascita']), normal_style)])
             
-        t = Table(tabella_dati, colWidths=[185, 40])
+        t = Table(tabella_dati, colWidths=[180, 40])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -128,7 +120,7 @@ def genera_pdf(casa, ospite):
     colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE")
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
-    # Affiancamento delle tabelle tramite macro-tabella invisibile
+    # Inserimento dei blocchi in una macro-tabella invisibile a 2 colonne reali per affiancarle
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
     macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
     macro_tabella.setStyle(TableStyle([
@@ -143,7 +135,7 @@ def genera_pdf(casa, ospite):
     buffer.seek(0)
     return buffer.getvalue()
 
-# --- INTERFACCIA WEB ---
+# --- INTERFACCIA GRAFICA STREAMLIT ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -163,13 +155,15 @@ if file_casa and file_ospite:
     if st.button("⚡ Elabora e Genera PDF con QR Code", type="primary"):
         with st.spinner("Estrazione dati e creazione PDF in corso..."):
             try:
+                # Avvio analisi parallela
                 dati_casa = analizza_distinta(file_casa, "CASA")
                 dati_ospite = analizza_distinta(file_ospite, "OSPITE")
                 
+                # Generazione PDF A4
                 pdf_data = genera_pdf(dati_casa, dati_ospite)
                 st.success("🎉 Distinte elaborate ed unite con successo!")
                 
-                # Caricamento temporaneo su file.io
+                # Caricamento del PDF su File.io (scadenza automatica impostata a 1 giorno)
                 files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
                 response_cloud = requests.post('https://file.io', files=files)
                 
@@ -177,7 +171,7 @@ if file_casa and file_ospite:
                     pdf_url = response_cloud.json().get("link")
                 else:
                     pdf_url = "https://file.io"
-                    st.error("Errore temporaneo nel caricamento cloud. Usa il download locale.")
+                    st.error("Errore temporaneo nel caricamento del QR Code online. Scarica il file dal PC qui sotto.")
 
                 c1, c2 = st.columns(2)
                 with c1:
@@ -196,8 +190,9 @@ if file_casa and file_ospite:
                 
                 with c2:
                     st.markdown("### 📱 Scarica su Smartphone")
-                    st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
+                    st.write("Inquadra questo QR Code con la fotocamera del telefono per salvare il PDF:")
                     
+                    # Generazione QR Code leggero legato al link temporaneo cloud
                     qr = qrcode.QRCode(
                         version=None,
                         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -211,7 +206,7 @@ if file_casa and file_ospite:
                     buf_qr = io.BytesIO()
                     img_qr.save(buf_qr, format="PNG")
                     st.image(buf_qr.getvalue(), width=220)
-                    st.caption(f"Link diretto: {pdf_url}")
+                    st.caption(f"Link diretto temporaneo: {pdf_url}")
                     
             except Exception as e:
-                st.error(f"Si è verificato un errore durante l'elaborazione: {e}")
+                st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
