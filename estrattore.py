@@ -9,9 +9,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# Inizializzazione del client OpenAI
-client = OpenAI()
-
 def encode_image(uploaded_file):
     """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
     img = Image.open(uploaded_file)
@@ -22,8 +19,10 @@ def encode_image(uploaded_file):
     img.save(buffer_img, format="JPEG", quality=85)
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
-def analizza_distinta(uploaded_file, ruolo_squadra):
+def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     """Invia la foto ottimizzata a OpenAI ed estrae i dati strutturati garantendo il formato"""
+    # Inizializza il client usando esplicitamente la chiave passata dall'interfaccia principale
+    client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
@@ -58,6 +57,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         temperature=0.0
     )
     
+    # Estrazione sicura della stringa JSON con l'indice corretto
     risultato_grezzo = response.choices[0].message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
@@ -112,7 +112,7 @@ def genera_pdf(casa, ospite):
                 testo_anno = Paragraph(str(anno), normal_style)
             tabella_dati.append([testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[180, 45])
+        t = Table(tabella_dati, colWidths=[180, 40])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -121,7 +121,7 @@ def genera_pdf(casa, ospite):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[225, 20, 225])
+    macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
