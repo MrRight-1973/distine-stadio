@@ -43,7 +43,7 @@ sponsor_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 if len(sponsor_files) > 5:
-    st.sidebar.error("Puoi caricare un massimo di 5 sponsor! Verranno considerati solo i primi 5.")
+    st.sidebar.error("Puoi caricare un maximum di 5 sponsor! Verranno considerati solo i primi 5.")
     sponsor_files = sponsor_files[:5]
 
 st.sidebar.header("⚖️ Terna Arbitrale")
@@ -169,7 +169,8 @@ if st.session_state.dati_pronti:
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=)
+            # CORRETTO: Aggiunta la larghezza fissa [260, 260] per le due colonne
+            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
             story.append(grid)
             
@@ -178,19 +179,16 @@ if st.session_state.dati_pronti:
             # --- ELABORAZIONE E RENDERING DEI 5 SPONSOR IN LINEA ---
             if sponsor_files:
                 blocchi_sponsor = []
-                # Calcola dinamicamente la larghezza massima per ogni sponsor (max 5 in linea su ~500 punti)
                 num_sponsor = min(len(sponsor_files), 5)
                 width_singolo = int(480 / num_sponsor) - 10
                 
                 for idx, s_file in enumerate(sponsor_files[:5]):
                     try:
                         img = Image.open(s_file).convert("RGBA")
-                        # Ottimizzazione grafica: Applica trasparenza/opacità al 25% nativamente
-                        alpha = img.split()[3]
+                        alpha = img.split()
                         alpha = ImageEnhance.Brightness(alpha).enhance(0.25)
                         img.putalpha(alpha)
                         
-                        # Salva temporaneamente l'immagine modificata
                         temp_path = f"temp_sponsor_{idx}.png"
                         img.save(temp_path)
                         blocchi_sponsor.append(RLImage(temp_path, width=width_singolo, height=35, kind='proportional'))
@@ -209,7 +207,6 @@ if st.session_state.dati_pronti:
             story.append(Spacer(1, 2))
             story.append(RLImage("temp_pdf_qr.png", width=65, height=65))
             
-            # Sfondo neutro di fallback se non ci sono sponsor caricati
             def draw_background_fallback(canvas, doc):
                 if not sponsor_files:
                     canvas.saveState()
@@ -225,5 +222,5 @@ if st.session_state.dati_pronti:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta con 5 sponsor in trasparenza generata!")
+            st.success("✅ Distinta dinamica in singola pagina A4 ed esportata!")
             st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
