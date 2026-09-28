@@ -1,13 +1,41 @@
-# Sostituisci il blocco finale del codice (dove c'è il pulsante di estrazione) con questo:
+import streamlit as st
+import os
+import io
+import re
+from PIL import Image, ImageEnhance, ImageDraw
+import qrcode
+import pytesseract
 
+# 1. Configurazione grafica della pagina web
+st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
+st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
+
+# 2. Configurazione Session State e Sidebar
+if "dati_pronti" not in st.session_state:
+    st.session_state.dati_pronti = False
+if "casa_giocatori_input" not in st.session_state:
+    st.session_state.casa_giocatori_input = [""] * 20
+if "ospite_giocatori_input" not in st.session_state:
+    st.session_state.ospite_giocatori_input = [""] * 20
+
+# (... Mantieni qui tutti i vari st.sidebar.text_input per arbitri e sponsor ...)
+
+# 3. Creazione delle caselle di caricamento file (FONDAMENTALE PRIMA DEL CONTROLLO)
+st.subheader("📸 Carica le FOTO delle distinte")
+col1, col2 = st.columns(2)
+
+with col1:
+    foto_casa = st.file_uploader("Foto Distinta Squadra CASA", type=["png", "jpg", "jpeg"])
+with col2:
+    foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
+
+# 4. SOLO ORA puoi inserire il blocco di estrazione geometrica in fondo al file
 if foto_casa and foto_ospite:
     st.markdown("### 🔍 1. Analisi e verifica geometrica delle colonne")
     
     if st.button("🚀 AVVIA ESTRAZIONE PURA DALLE FOTO", use_container_width=True):
         with st.spinner("Il motore spaziale sta tracciando le coordinate X/Y delle colonne..."):
             
-            # Eseguiamo la funzione PIL pura sulla foto CASA passandogli direttamente il file caricato
-            # (Adattiamo la funzione precedente per ritornare sia i dati che l'immagine disegnata)
             def analizza_e_disegna_squadra(uploaded_file, etichetta_squadra):
                 img_originale = Image.open(uploaded_file)
                 img_disegno = img_originale.convert("RGB")
@@ -41,7 +69,6 @@ if foto_casa and foto_ospite:
                 if col_nascita_left is None:
                     col_nascita_left, col_nascita_right = int(larghezza_img * 0.58), int(larghezza_img * 0.85)
 
-                # Disegniamo i rettangoli di controllo visivo
                 draw.rectangle([col_nomi_left, 0, col_nomi_right, altezza_img], outline="blue", width=6)
                 draw.rectangle([col_nascita_left, 0, col_nascita_right, altezza_img], outline="green", width=6)
 
@@ -90,11 +117,11 @@ if foto_casa and foto_ospite:
                     
                     parole = stringa_nome.split()
                     if len(parole) >= 2:
-                        cognome = parole[0].upper()
+                        cognome = parole.upper()
                         nome = " ".join(parole[1:]).title()
                         riga_giocatore = f"{cognome} {nome}"
                     else:
-                        riga_giocatore = parole[0].upper() if parole else ""
+                        riga_giocatore = parole.upper() if parole else ""
                         
                     if anno_pulito and riga_giocatore:
                         riga_giocatore += f" ({anno_pulito})"
@@ -106,17 +133,14 @@ if foto_casa and foto_ospite:
                     giocatori_finali.append("")
                 return giocatori_finali[:20], img_disegno
 
-            # Esecuzione per le due foto caricate dall'utente nei componenti st.file_uploader
             g_casa, img_visto_casa = analizza_e_disegna_squadra(foto_casa, "CASA")
             g_ospite, img_visto_ospite = analizza_e_disegna_squadra(foto_ospite, "OSPITE")
             
-            # Salviamo i dati nello stato per passarli al Box 2 (il pannello di modifica segreteria)
             st.session_state.casa_giocatori_input = g_casa
             st.session_state.ospite_giocatori_input = g_ospite
             st.session_state.dati_pronti = True
             
-            # Mostriamo a schermo i due fogli con i rettangoli colorati per verificare i margini pixel
-            st.success("Estrazione completata! Verifica qui sotto se le colonne geometriche (Rettangoli Blu/Verdi) sono centrate:")
+            st.success("Estrazione completata!")
             visto_col1, visto_col2 = st.columns(2)
             with visto_col1:
                 st.image(img_visto_casa, caption="Mappa geometrica Squadra Casa", use_container_width=True)
