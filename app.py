@@ -8,10 +8,16 @@ from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
-st.title("⚽ Centro Gestione Distinte Gara Interattivo")
-st.write("Carica i fogli gara, modifica le tabelle e correggi/aggiungi a mano i giocatori mancanti.")
+st.title("⚽ Centro Gestione Distinte Gara Gestionale")
+st.write("Carica i fogli gara. Le tabelle hanno 20 righe fisse: usa i pulsanti di Shift per far scalare i nomi in automatico.")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
+
+# Inizializzazione degli stati delle griglie se non presenti
+if "griglia_casa" not in st.session_state:
+    st.session_state["griglia_casa"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
+if "griglia_ospite" not in st.session_state:
+    st.session_state["griglia_ospite"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
 
 # 1. Caricamento file iniziale
 col_f1, col_f2 = st.columns(2)
@@ -22,64 +28,113 @@ with col_f2:
     st.subheader("🚀 Squadra Ospite")
     file_ospite = st.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="ospite")
 
-# Sezione di elaborazione AI iniziale
 if file_casa and file_ospite:
-    if "dati_iniziali_estratti" not in st.session_state:
+    if "dati_mappati" not in st.session_state:
         if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
             with st.spinner("L'AI sta leggendo le distinte..."):
                 try:
                     casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                     ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
-                    st.session_state["dati_iniziali_estratti"] = {"casa": casa_raw, "ospite": ospite_raw}
+                    
+                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"])
+                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"])
+                    st.session_state["macro_info"] = {"campionato": casa_raw["campionato"], "data": casa_raw["data"], "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"], "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]}
+                    st.session_state["dati_mappati"] = True
                     st.rerun()
                 except Exception as e:
                     st.error(f"Errore durante l'analisi visiva: {e}")
 
-# --- AREA DI CORREZIONE E AGGIUNTA MANUALE ---
-if "dati_iniziali_estratti" in st.session_state:
+# --- AREA DI INTERFACCIA E LOGICA DI SHIFT DELLE RIGHE ---
+if "dati_mappati" in st.session_state:
     st.markdown("---")
-    st.header("✏️ Fase 2: Controllo e Aggiunta Manuale")
-    st.info("💡 SE MANCA UN GIOCATORE: Clicca sull'icona '+' in fondo alla tabella per aggiungere una nuova riga e inserire i dati a mano!")
+    st.header("✏️ Fase 2: Controllo, Correzione e Funzioni di Shift")
     
-    casa_data = st.session_state["dati_iniziali_estratti"]["casa"]
-    ospite_data = st.session_state["dati_iniziali_estratti"]["ospite"]
+    info = st.session_state["macro_info"]
     
     st.subheader("🏁 Informazioni Generali Match")
     c_g1, c_g2 = st.columns(2)
     with c_g1:
-        edit_campionato = st.text_input("🏆 Campionato / Categoria", value=casa_data.get("campionato", ""))
+        edit_campionato = st.text_input("🏆 Campionato / Categoria", value=info["campionato"])
         edit_arbitro = st.text_input("🏁 Arbitro (Nome e Cognome)", value="")
         edit_ass1 = st.text_input("🚩 Assistente 1", value="")
     with c_g2:
-        edit_data = st.text_input("📅 Data Partita", value=casa_data.get("data", ""))
+        edit_data = st.text_input("📅 Data Partita", value=info["data"])
         st.write("")
         edit_ass2 = st.text_input("🚩 Assistente 2", value="")
         
     st.markdown("---")
-    
     c_sq1, c_sq2 = st.columns(2)
     
+    # --- GESTIONE SQUADRA CASA ---
     with c_sq1:
         st.subheader("🏠 SQUADRA CASA")
-        edit_nome_casa = st.text_input("Nome Società Ospitante", value=casa_data.get("squadra", ""))
-        edit_all_casa = st.text_input("Allenatore Ospitante", value=casa_data.get("allenatore", ""))
+        edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
+        edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
-        df_casa = pd.DataFrame(casa_data.get("giocatori", []))
-        if df_casa.empty:
-            df_casa = pd.DataFrame(columns=["numero", "cognome_nome", "anno_nascita"])
+        # Mostra la griglia modificabile
+        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, disabled=["numero"])
         
-        editor_casa = st.data_editor(df_casa, num_rows="dynamic", key="edit_grid_casa", use_container_width=True)
-        
+        # Funzioni di Shift Casa
+        row_shift_casa = st.number_input("Seleziona N° riga per Shift (Casa)", min_value=1, max_value=20, value=13)
+        c_btn1, c_btn2 = st.columns(2)
+        with c_btn1:
+            if st.button("⬇️ Slitta in basso (Inserisci riga)", key="shift_down_casa"):
+                idx = row_shift_casa - 1
+                df = st.session_state["griglia_casa"].copy()
+                # Creiamo una riga vuota da inserire
+                nuova_riga = pd.DataFrame([{"numero": row_shift_casa, "cognome_nome": "", "anno_nascita": ""}])
+                df_top = df.iloc[:idx]
+                df_bottom = df.iloc[idx:19] # Taglia l'ultima riga (la 20esima) per rimanere a 20 righe fisse
+                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
+                # Ripristina i numeri di maglia corretti sequenziali da 1 a 20
+                df_nuovo["numero"] = range(1, 21)
+                st.session_state["griglia_casa"] = df_nuovo
+                st.rerun()
+        with c_btn2:
+            if st.button("⬆️ Slitta in alto (Elimina riga)", key="shift_up_casa"):
+                idx = row_shift_casa - 1
+                df = st.session_state["griglia_casa"].copy()
+                df_top = df.iloc[:idx]
+                df_bottom = df.iloc[idx+1:]
+                riga_vuota_finale = pd.DataFrame([{"numero": 20, "cognome_nome": "", "anno_nascita": ""}])
+                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
+                df_nuovo["numero"] = range(1, 21)
+                st.session_state["griglia_casa"] = df_nuovo
+                st.rerun()
+
+    # --- GESTIONE SQUADRA OSPITE ---
     with c_sq2:
         st.subheader("🚀 SQUADRA OSPITE")
-        edit_nome_ospite = st.text_input("Nome Società Ospite", value=ospite_data.get("squadra", ""))
-        edit_all_ospite = st.text_input("Allenatore Ospite", value=ospite_data.get("allenatore", ""))
+        edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
+        edit_all_ospite = st.text_input("Allenatore Ospite", value=info["all_ospite"])
         
-        df_ospite = pd.DataFrame(ospite_data.get("giocatori", []))
-        if df_ospite.empty:
-            df_ospite = pd.DataFrame(columns=["numero", "cognome_nome", "anno_nascita"])
-            
-        editor_ospite = st.data_editor(df_ospite, num_rows="dynamic", key="edit_grid_ospite", use_container_width=True)
+        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, disabled=["numero"])
+        
+        # Funzioni di Shift Ospite
+        row_shift_ospite = st.number_input("Seleziona N° riga per Shift (Ospite)", min_value=1, max_value=20, value=13)
+        o_btn1, o_btn2 = st.columns(2)
+        with o_btn1:
+            if st.button("⬇️ Slitta in basso (Inserisci riga)", key="shift_down_ospite"):
+                idx = row_shift_ospite - 1
+                df = st.session_state["griglia_ospite"].copy()
+                nuova_riga = pd.DataFrame([{"numero": row_shift_ospite, "cognome_nome": "", "anno_nascita": ""}])
+                df_top = df.iloc[:idx]
+                df_bottom = df.iloc[idx:19]
+                df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
+                df_nuovo["numero"] = range(1, 21)
+                st.session_state["griglia_ospite"] = df_nuovo
+                st.rerun()
+        with c_btn2:
+            if st.button("⬆️ Slitta in alto (Elimina riga)", key="shift_up_ospite"):
+                idx = row_shift_ospite - 1
+                df = st.session_state["griglia_ospite"].copy()
+                df_top = df.iloc[:idx]
+                df_bottom = df.iloc[idx+1:]
+                riga_vuota_finale = pd.DataFrame([{"numero": 20, "cognome_nome": "", "anno_nascita": ""}])
+                df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
+                df_nuovo["numero"] = range(1, 21)
+                st.session_state["griglia_ospite"] = df_nuovo
+                st.rerun()
 
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
@@ -89,12 +144,12 @@ if "dati_iniziali_estratti" in st.session_state:
                 squadra_casa_corretta = {
                     "squadra": pulisci_testo(edit_nome_casa),
                     "allenatore": pulisci_testo(edit_all_casa),
-                    "giocatori": editor_casa.to_dict(orient="records")
+                    "giocatori": st.session_state["griglia_casa"].to_dict(orient="records")
                 }
                 squadra_ospite_corretta = {
                     "squadra": pulisci_testo(edit_nome_ospite),
                     "allenatore": pulisci_testo(edit_all_ospite),
-                    "giocatori": editor_ospite.to_dict(orient="records")
+                    "giocatori": st.session_state["griglia_ospite"].to_dict(orient="records")
                 }
                 info_gara_corrette = {
                     "campionato": pulisci_testo(edit_campionato),
@@ -116,7 +171,7 @@ if "dati_iniziali_estratti" in st.session_state:
                 
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code pronti per il download!")
+                st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
@@ -137,7 +192,3 @@ if "pdf_interattivo_pronto" in st.session_state:
             label="📥 Scarica PDF su Smartphone",
             data=st.session_state["pdf_interattivo_pronto"],
             file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
