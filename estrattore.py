@@ -28,18 +28,20 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI ed estrae i dati strutturati includendo data e campionato"""
+    """Invia la foto a OpenAI ed estrae rigorosamente TUTTI i giocatori riga per riga"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Analizza la distinta gara e restituisci un oggetto json valido. "
-        "Devi estrarre obbligatoriamente:\n"
+        "Sei un assistente esperto di calcio LND. Il tuo compito principale è scansionare la tabella dei calciatori riga per riga, "
+        "seguendo rigorosamente la numerazione progressiva delle maglie (da 1 a 20 o più). Assicurati di NON SALTARE NESSUNA RIGA, "
+        "incluso chi indossa il numero 13 o siede in panchina. "
+        "Estrai obbligatoriamente:\n"
         "1. Il NOME DELLA SQUADRA.\n"
         "2. Il NOME E COGNOME DELL'ALLENATORE.\n"
-        "3. La DATA DELLA PARTITA (cerca in alto nel foglio).\n"
-        "4. Il CAMPIONATO o CATEGORIA (es. Promozione, Prima Categoria, Eccellenza).\n"
-        "5. La lista di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita'.\n\n"
+        "3. La DATA DELLA PARTITA (in alto nel foglio).\n"
+        "4. Il CAMPIONATO o CATEGORIA.\n"
+        "5. La lista COMPLETA di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita' (senza omettere nessuno).\n\n"
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
@@ -60,7 +62,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai i dati e formattali in un dizionario json per la squadra {ruolo_squadra} da questa immagine."},
+                    {"type": "text", "text": f"Analizza attentamente la tabella ed estrai l'elenco completo riga per riga senza saltare nessun numero per la squadra {ruolo_squadra} in formato json."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -68,8 +70,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    # INDICE CORRETTO INSERITO ALLA RIGA 53
-    risultato_grezzo = response.choices[0].message.content
+    risultato_grezzo = response.choices.message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
@@ -113,7 +114,7 @@ def genera_pdf(casa, ospite, info_gara):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[270, 270])
+    t_info = Table(tabella_info_dati, colWidths=)
     t_info.setStyle(TableStyle([
         ('LINEBELOW', (0,-1), (-1,-1), 1, colors.HexColor("#CBD5E0")),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -143,7 +144,7 @@ def genera_pdf(casa, ospite, info_gara):
             testo_anno = Paragraph(str(g['anno_nascita']), normal_style)
             tabella_dati.append([testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[210, 45])
+        t = Table(tabella_dati, colWidths=)
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -152,7 +153,7 @@ def genera_pdf(casa, ospite, info_gara):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[255, 30, 255])
+    macro_tabella = Table(macro_tabella_dati, colWidths=)
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
