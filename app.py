@@ -3,8 +3,11 @@ import io
 import qrcode
 import requests
 import base64
+import json  # <-- AGGIUNTO QUI PER RISOLVERE L'ERRORE
+import zlib  # <-- AGGIUNTO PER LA COMPRESSIONE DEL QR CODE
 import pandas as pd
 from estrattore import analizza_distinta, genera_pdf, pulisci_testo
+
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
