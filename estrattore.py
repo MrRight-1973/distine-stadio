@@ -11,7 +11,7 @@ from reportlab.lib import colors
 
 def pulisci_testo(testo):
     """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
-    if not testo:
+    if not testo or str(testo).strip() == "":
         return ""
     testo_pulito = str(testo).replace("_", " ")
     testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
@@ -28,13 +28,12 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI ed estrae i dati in formato JSON strutturato"""
+    """Invia la foto a OpenAI ed estrae i dati in formato JSON garantendo 20 righe strutturate"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Il tuo compito principale è scansionare la griglia dei calciatori. "
-        "Devi leggere la tabella seguendo obbligatoriamente l'ordine dei NUMERI DI MAGLIA da 1 a 20. Non saltare nessuna riga. "
+        "Sei un assistente esperto di calcio LND. Il tuo compito è scansionare la griglia dei calciatori. "
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
@@ -42,7 +41,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         "  \"data\": \"DD/MM/YYYY\",\n"
         "  \"campionato\": \"Nome Campionato\",\n"
         "  \"giocatori\": [\n"
-        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": 2005}\n"
+        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": \"2005\"}\n"
         "  ]\n"
         "}"
     )
@@ -55,7 +54,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai l'elenco completo riga per riga per la squadra {ruolo_squadra} in formato json."},
+                    {"type": "text", "text": f"Estrai l'elenco dei giocatori per la squadra {ruolo_squadra} in formato json."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -63,29 +62,49 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content
-    if not risultato_grezzo:
-        raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
-        
-    risultato_grezzo = risultato_grezzo.strip()
+    risultato_grezzo = response.choices[0].message.content.strip()
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
         risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
         
     dati = json.loads(risultato_grezzo)
     
+    # Pulizia testuale iniziale dei campi macro
     dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
     dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
     dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
     dati["data"] = pulisci_testo(dati.get("data", "NON INDICATO"))
     
+    # Mappiamo i giocatori estratti dall'AI in un dizionario indicizzato per numero di maglia
+    giocatori_estratti = {}
     for g in dati.get("giocatori", []):
-        g["cognome_nome"] = pulisci_testo(g.get("cognome_nome", ""))
-        
+        try:
+            num = int(g.get("numero", 0))
+            if 1 <= num <= 20:
+                giocatori_estratti[num] = {
+                    "cognome_nome": pulisci_testo(g.get("cognome_nome", "")),
+                    "anno_nascita": str(g.get("anno_nascita", ""))
+                }
+        except:
+            continue
+            
+    # FORZATURA STRUTTURALE: Ricostruiamo la lista inserendo SEMPRE esattamente 20 righe
+    lista_20_giocatori = []
+    for i in range(1, 21):
+        if i in giocatori_estratti:
+            lista_20_giocatori.append({
+                "numero": i,
+                "cognome_nome": giocatori_estratti[i]["cognome_nome"],
+                "anno_nascita": giocatori_estratti[i]["anno_nascita"]
+            })
+        else:
+            lista_20_giocatori.append({"numero": i, "cognome_nome": "", "anno_nascita": ""})
+            
+    dati["giocatori"] = lista_20_giocatori
     return dati
 
 def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
-    """Genera il file PDF A4 con colonne affiancate e QR code integrato in alto a destra"""
+    """Genera il file PDF A4 con colonne affiancate e QR code integrato"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
@@ -107,7 +126,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[240, 240])
+    t_info = Table(tabella_info_dati, colWidths=[270, 200])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
         ('TOPPADDING', (0,0), (-1,-1), 1.5),
@@ -118,10 +137,10 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=55, height=55)
         tabella_header_dati = [[elementi_sinistra, img_qr_pdf]]
-        t_header = Table(tabella_header_dati, colWidths=[485, 65])
+        t_header = Table(tabella_header_dati, colWidths=[475, 75])
     else:
         tabella_header_dati = [[elementi_sinistra, ""]]
-        t_header = Table(tabella_header_dati, colWidths=[485, 65])
+        t_header = Table(tabella_header_dati, colWidths=[475, 75])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -147,8 +166,8 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ]
         
-        for indice, g in enumerate(dati.get('giocatori', []), start=1):
-            testo_num = Paragraph(str(g.get('numero', indice)), normal_style)
+        for index, g in enumerate(dati.get('giocatori', [])):
+            testo_num = Paragraph(str(g.get('numero', index + 1)), normal_style)
             testo_nome = Paragraph(pulisci_testo(g.get('cognome_nome', '')), normal_style)
             testo_anno = Paragraph(str(g.get('anno_nascita', '')), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
