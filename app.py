@@ -4,6 +4,7 @@ import json
 import io
 import qrcode
 import requests
+import re
 from openai import OpenAI
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -16,7 +17,7 @@ st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="
 st.title("⚽ Centro Gestione Distinte Gara")
 st.write("Carica le distinte di entrambe le squadre per generare il PDF unico A4 con QR Code.")
 
-# 2. Inizializzazione del client OpenAI (legge in automatico la chiave dai Secrets di Streamlit)
+# 2. Inizializzazione del client OpenAI
 client = OpenAI()
 
 def encode_image(uploaded_file):
@@ -24,15 +25,16 @@ def encode_image(uploaded_file):
     return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra):
-    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON"""
+    """Invia la foto a OpenAI ed estrae i dati strutturati in JSON con pulizia automatica stringhe"""
     base64_image = encode_image(uploaded_file)
+    
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Analizza la distinta gara e restituisci un oggetto JSON. "
-        "Devi estrarre:\n"
+        "Sei un assistente esperto di calcio LND. Analizza la distinta gara e restituisci un oggetto JSON valido. "
+        "Devi estrarre obbligatoriamente:\n"
         "1. Il NOME DELLA SQUADRA.\n"
-        "2. Il NOME E COGNOME DELL'ALLENATORE (cerca la riga Allenatore/Coach).\n"
-        "3. La lista di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita' (ignora altri dirigenti).\n\n"
-        "Rispondi ESCLUSIVAMENTE con questo formato JSON:\n"
+        "2. Il NOME E COGNOME DELL'ALLENATORE.\n"
+        "3. La lista di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita'.\n\n"
+        "Rispondi ESCLUSIVAMENTE con un oggetto JSON avente questa esatta struttura:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
         "  \"allenatore\": \"Cognome Nome\",\n"
@@ -50,19 +52,27 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai i dati della squadra {ruolo_squadra} da questa distinta."},
+                    {"type": "text", "text": f"Estrai i dati in formato JSON per la squadra {ruolo_squadra} da questa immagine di distinta gara LND."},
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
                 ]
             }
         ],
         temperature=0.0
     )
-    return json.loads(response.choices[0].message.content)
+    
+    # Estrazione sicura della stringa di testo della risposta
+    risultato_grezzo = response.choices[0].message.content.strip()
+    
+    # FUNZIONE FAILSAFE: Rimuove eventuali blocchi markdown ```json ... ``` se generati per errore
+    if risultato_grezzo.startswith("```"):
+        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
+        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
+        
+    return json.loads(risultato_grezzo)
 
 def genera_pdf(casa, ospite):
     """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate"""
     buffer = io.BytesIO()
-    # Configurazione della pagina su formato A4 e margini ridotti per ottimizzare lo spazio
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
     styles = getSampleStyleSheet()
@@ -87,11 +97,10 @@ def genera_pdf(casa, ospite):
         for g in dati.get('giocatori', []):
             tabella_dati.append([Paragraph(g['cognome_nome'], normal_style), Paragraph(str(g['anno_nascita']), normal_style)])
             
-        # Larghezza colonne ottimizzata per la mezza pagina (220 totali: 180 nome, 40 anno)
-        t = Table(tabella_dati, colWidths=[180, 40])
+        t = Table(tabella_dati, colWidths=[185, 40])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),  # Padding ridottissimo per risparmiare altezza
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
             ('TOPPADDING', (0,0), (-1,-1), 2),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E0")),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -99,11 +108,10 @@ def genera_pdf(casa, ospite):
         elementi_squadra.append(t)
         return elementi_squadra
 
-    # Generiamo i blocchi delle due squadre
     colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE")
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
-    # Inseriamo i due blocchi dentro una macro-tabella invisibile a 2 colonne per affiancarle (A4 ha circa 550pt utili)
+    # Affiancamento delle tabelle tramite macro-tabella invisibile
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
     macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
     macro_tabella.setStyle(TableStyle([
@@ -118,7 +126,7 @@ def genera_pdf(casa, ospite):
     buffer.seek(0)
     return buffer.getvalue()
 
-# --- INTERFACCIA WEB (LAYOUT GRAFICO) ---
+# --- INTERFACCIA WEB ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -133,22 +141,18 @@ with col2:
     if file_ospite:
         st.image(file_ospite, use_container_width=True)
 
-# Gestione elaborazione al caricamento di entrambi i file
 if file_casa and file_ospite:
     st.write("")
     if st.button("⚡ Elabora e Genera PDF con QR Code", type="primary"):
         with st.spinner("Estrazione dati e creazione PDF in corso..."):
             try:
-                # Esegue l'analisi delle immagini tramite AI
                 dati_casa = analizza_distinta(file_casa, "CASA")
                 dati_ospite = analizza_distinta(file_ospite, "OSPITE")
                 
-                # Genera il file PDF in memoria (Formato A4 compatto)
                 pdf_data = genera_pdf(dati_casa, dati_ospite)
-                
                 st.success("🎉 Distinte elaborate ed unite con successo!")
                 
-                # Carica temporaneamente il PDF su file.io per generare il link per lo smartphone (scade in 1 giorno)
+                # Caricamento temporaneo su file.io
                 files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
                 response_cloud = requests.post('https://file.io', files=files)
                 
@@ -156,9 +160,8 @@ if file_casa and file_ospite:
                     pdf_url = response_cloud.json().get("link")
                 else:
                     pdf_url = "https://file.io"
-                    st.error("Errore temporaneo nel caricamento del codice online. Scarica il PDF localmente.")
+                    st.error("Errore temporaneo nel caricamento cloud. Usa il download locale.")
 
-                # Mostra i risultati a schermo divisi in due sezioni pulite
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown("### 📋 Riepilogo Squadre")
@@ -178,7 +181,6 @@ if file_casa and file_ospite:
                     st.markdown("### 📱 Scarica su Smartphone")
                     st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
                     
-                    # Genera il QR Code dinamico (leggero e facile da scansionare sul campo)
                     qr = qrcode.QRCode(
                         version=None,
                         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -189,7 +191,6 @@ if file_casa and file_ospite:
                     qr.make(fit=True)
                     img_qr = qr.make_image(fill_color="black", back_color="white")
                     
-                    # Mostra l'immagine del QR Code nell'app
                     buf_qr = io.BytesIO()
                     img_qr.save(buf_qr, format="PNG")
                     st.image(buf_qr.getvalue(), width=220)
