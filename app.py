@@ -36,7 +36,7 @@ def analizza_distinta_con_ia(immagine_pil, client):
     )
     
     # Lista di modelli da provare in ordine di preferenza se si verifica un errore 503/sovraccarico
-    modelli_da_provare = ['gemini-3.8-flash', 'gemini-1.5-flash', 'gemini-2.5-pro']
+    modelli_da_provare = ['gemini-3.8-flash', 'gemini-2.5-flash']
     
     for modello in modelli_da_provare:
         try:
