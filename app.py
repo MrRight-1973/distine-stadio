@@ -20,9 +20,9 @@ st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione FOTO reale
 if "dati_pronti" not in st.session_state:
     st.session_state.dati_pronti = False
 if "casa_giocatori_input" not in st.session_state:
-    st.session_state.casa_giocatori_input = []
+    st.session_state.casa_giocatori_input = [""] * 20
 if "ospite_giocatori_input" not in st.session_state:
-    st.session_state.ospite_giocatori_input = []
+    st.session_state.ospite_giocatori_input = [""] * 20
 if "casa_all_input" not in st.session_state:
     st.session_state.casa_all_input = ""
 if "ospite_all_input" not in st.session_state:
@@ -33,7 +33,6 @@ if "squadra_ospite_nome" not in st.session_state:
     st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
 
 # CONFIGURAZIONE PUNTAZIONE LOCALE DIZIONARIO ITALIANO
-# Diciamo a Tesseract di cercare il file 'ita.traineddata' direttamente nella cartella corrente di GitHub
 os.environ["TESSDATA_PREFIX"] = os.getcwd()
 
 # 1. SIDEBAR: CONFIGURAZIONE
@@ -43,7 +42,7 @@ campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - 
 
 st.sidebar.header("🏢 Pannello Sponsor (Max 5)")
 sponsor_files = st.sidebar.file_uploader("Carica i loghi degli sponsor (PNG/JPG)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-if len(sponsor_files) > 5:
+if sponsor_files and len(sponsor_files) > 5:
     st.sidebar.error("Carica massimo 5 sponsor.")
     sponsor_files = sponsor_files[:5]
 
@@ -66,44 +65,38 @@ def formatta_riga_giocatore_reale(testo_grezzo):
     if len(testo_grezzo) < 3:
         return ""
         
-    # Isola l'anno di nascita pulito intercettando i numeri di 2 o 4 cifre
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
-    # Isola e protegge i ruoli importanti
     ruolo = ""
     if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
     elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC ", " V "]): ruolo = " (VC)"
     
-    # Pulisce dai lunghi codici delle tessere FIGC per isolare l'anagrafica testuale
     testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
     testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
     testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
-    testo_puro = testo_puro.replace("C", "").replace("VC", "").replace("V", "").strip()
     
     parole = testo_puro.split()
     if len(parole) >= 2:
-        cognome = parole.upper()
+        cognome = parole[0].upper()
         nome = " ".join(parole[1:]).title()
         res = f"{cognome} {nome}{ruolo}"
         return f"{res} ({anno})" if anno else res
     elif len(parole) == 1:
-        res = parole.upper() + ruolo
+        res = parole[0].upper() + ruolo
         return f"{res} ({anno})" if anno else res
     return ""
 
 def esegui_ocr_foto_reale(uploaded_file):
-    """Analizza l'immagine reale usando il dizionario italiano presente nella cartella di GitHub"""
+    """Analizza l'immagine reale usando il dizionario italiano"""
     giocatori = []
     all_nome = "Non rilevato"
     squadra_nome = "SQUADRA RILEVATA"
     try:
         img = Image.open(uploaded_file)
-        # Ottimizzazione visiva per rendere nitide le scritte in ombra o storte
         img = img.convert('L')
         img = ImageEnhance.Contrast(img).enhance(2.0)
         
-        # Eseguiamo l'OCR forzando l'utilizzo del nostro file italiano locale
         testo = pytesseract.image_to_string(img, lang='ita')
         righe = testo.split('\n')
         
@@ -156,8 +149,10 @@ if st.session_state.dati_pronti:
         st.rerun()
 
     st.warning("📝 **Pannello di Controllo Segreteria:** Dati estratti automaticamente dalle foto. Verifica le caselle e correggi eventuali piccoli refusi prima di stampare.")
+    
     edit_col1, edit_col2 = st.columns(2)
-    lista_casa_corretta, lista_ospite_corretta = [], []
+    lista_casa_corretta = []
+    lista_ospite_corretta = []
     
     with edit_col1:
         st.subheader("Modifica SQUADRA CASA")
@@ -165,100 +160,132 @@ if st.session_state.dati_pronti:
         c_all_edit = st.text_input("Allenatore Casa", st.session_state.casa_all_input)
         st.markdown("**Giocatori (Progressione automatica):**")
         for idx, player in enumerate(st.session_state.casa_giocatori_input):
-            valore_corretto = st.text_input(f"Casa - Maglia {idx+1}", value=player, key=f"c_{idx}")
-            lista_casa_corretta.append(f"{idx+1}. {valore_corretto}")
+            p_val = st.text_input(f"Casa - N. {idx+1}", value=player, key=f"c_p_{idx}")
+            lista_casa_corretta.append(p_val)
             
     with edit_col2:
         st.subheader("Modifica SQUADRA OSPITE")
-        nome_squadra_ospite = st.text_input("Nome Società Ospite", st.session_state.squadra_ospite_nome)
+        nome_squadra_ospite = st.text_input("Nome Società Ospite (OSPITE)", st.session_state.squadra_ospite_nome)
         o_all_edit = st.text_input("Allenatore Ospite", st.session_state.ospite_all_input)
         st.markdown("**Giocatori (Progressione automatica):**")
         for idx, player in enumerate(st.session_state.ospite_giocatori_input):
-            valore_corretto = st.text_input(f"Ospite - Maglia {idx+1}", value=player, key=f"o_{idx}")
-            lista_ospite_corretta.append(f"{idx+1}. {valore_corretto}")
+            p_val = st.text_input(f"Ospite - N. {idx+1}", value=player, key=f"o_p_{idx}")
+            lista_ospite_corretta.append(p_val)
+
+    def genera_pdf_distinte():
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+        story = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, leading=22, alignment=1, textColor=colors.HexColor('#1A365D'))
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=10, leading=14, alignment=1, textColor=colors.HexColor('#4A5568'))
+        th_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=11, leading=14, bold=True, textColor=colors.white, alignment=1)
+        td_style = ParagraphStyle('TableCell', parent=styles['Normal'], fontSize=9, leading=12)
+        
+        story.append(Paragraph("⚽ DISTINTA UFFICIALE DI GARA", title_style))
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(f"<b>Campionato:</b> {campionato_info} | <b>Data:</b> {data_partita}", subtitle_style))
+        story.append(Spacer(1, 15))
+        
+        match_title_style = ParagraphStyle('MatchTitle', parent=styles['Heading2'], fontSize=14, leading=18, alignment=1, bold=True)
+        data_match = [[Paragraph(f"{nome_squadra_casa} vs {nome_squadra_ospite}", match_title_style)]]
+        t_match = Table(data_match, colWidths=[535])
+        t_match.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EDF2F7')),
+            ('PADDING', (0,0), (-1,-1), 8),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('LINEBELOW', (0,0), (-1,-1), 2, colors.HexColor('#1A365D'))
+        ]))
+        story.append(t_match)
+        story.append(Spacer(1, 15))
+        
+        qr_data = f"Match: {nome_squadra_casa} vs {nome_squadra_ospite}\nData: {data_partita}\nCamp: {campionato_info}"
+        qr = qrcode.QRCode(version=1, box_size=10, border=1)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        img_qr = qr.make_image(fill_color="black", back_color="white")
+        
+        qr_buffer = io.BytesIO()
+        img_qr.save(qr_buffer, format="PNG")
+        qr_buffer.seek(0)
+        rl_qr_img = RLImage(qr_buffer, width=70, height=70)
+        
+        arbitri_testo = f"<b>Arbitro:</b> {nome_arbitro}<br/><b>Assistente 1:</b> {assistente_1}<br/><b>Assistente 2:</b> {assistente_2}"
+        data_info = [[Paragraph(arbitri_testo, td_style), rl_qr_img]]
+        t_info = Table(data_info, colWidths=[450, 85])
+        t_info.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),
+            ('PADDING', (0,0), (-1,-1), 5)
+        ]))
+        story.append(t_info)
+        story.append(Spacer(1, 15))
+        
+        corpo_tabella = [[Paragraph(nome_squadra_casa, th_style), Paragraph(nome_squadra_ospite, th_style)]]
+        
+        for i in range(20):
+            p_casa = lista_casa_corretta[i] if i < len(lista_casa_corretta) else ""
+            p_ospite = lista_ospite_corretta[i] if i < len(lista_ospite_corretta) else ""
+            
+            txt_c = f"<b>{i+1}.</b> {p_casa}" if p_casa else ""
+            txt_o = f"<b>{i+1}.</b> {p_ospite}" if p_ospite else ""
+            
+            corpo_tabella.append([Paragraph(txt_c, td_style), Paragraph(txt_o, td_style)])
+            
+        corpo_tabella.append([
+            Paragraph(f"<b>ALL:</b> {c_all_edit}", td_style),
+            Paragraph(f"<b>ALL:</b> {o_all_edit}", td_style)
+        ])
+        
+        t_giocatori = Table(corpo_tabella, colWidths=[267, 268])
+        t_giocatori.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (0,0), colors.HexColor('#1A365D')),
+            ('BACKGROUND', (1,0), (1,0), colors.HexColor('#C53030')),
+            ('PADDING', (0,0), (-1,-1), 4),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#F7FAFC')])
+        ]))
+        story.append(t_giocatori)
+        story.append(Spacer(1, 20))
+        
+        if sponsor_files:
+            story.append(Paragraph("<b>SPONSOR UFFICIALI</b>", ParagraphStyle('SponsTitle', parent=styles['Normal'], fontSize=9, bold=True, textColor=colors.HexColor('#718096'), alignment=1)))
+            story.append(Spacer(1, 5))
+            
+            sponsor_images = []
+            for sp_file in sponsor_files:
+                try:
+                    sp_file.seek(0)
+                    sp_img = RLImage(io.BytesIO(sp_file.read()), width=60, height=30)
+                    sponsor_images.append(sp_img)
+                except:
+                    pass
+            
+            if sponsor_images:
+                while len(sponsor_images) < 5:
+                    sponsor_images.append("")
+                t_sponsor = Table([sponsor_images], colWidths=[107]*5)
+                t_sponsor.setStyle(TableStyle([
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
+                ]))
+                story.append(t_sponsor)
+                
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
 
     st.markdown("---")
-    if st.button("🚀 2. GENERA PDF DEFINITIVO CON CORREZIONI", use_container_width=True):
-        with st.spinner("Creazione del PDF compatibile con pagina singola A4..."):
-            app_url = "https://streamlit.io"
-            
-            qr = qrcode.QRCode(version=1, box_size=10, border=1)
-            qr.add_data(app_url)
-            qr.make(fit=True)
-            img_qr = qr.make_image(fill_color="black", back_color="white")
-            img_qr.save("temp_pdf_qr.png")
-            
-            pdf_buffer = io.BytesIO()
-            doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, rightMargin=25, leftMargin=25, topMargin=20, bottomMargin=20)
-            story, styles = [], getSampleStyleSheet()
-            
-            title_style = ParagraphStyle('T', fontSize=18, leading=22, alignment=1, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=2)
-            sub_style = ParagraphStyle('S', fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#4A5568"), spaceAfter=10)
-            team_title_style = ParagraphStyle('TT', fontSize=11, leading=14, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Bold", spaceAfter=4)
-            player_style = ParagraphStyle('P', fontSize=8.2, leading=10.5, textColor=colors.HexColor("#2D3748"))
-            staff_style = ParagraphStyle('St', fontSize=8.2, leading=10.5, textColor=colors.HexColor("#718096"), fontName="Helvetica-Oblique")
-            arbitro_style = ParagraphStyle('Ar', fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica", spaceAfter=10)
-            qr_text_style = ParagraphStyle('QT', fontSize=7.5, leading=10, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold")
-
-            story.append(Paragraph("FORMAZIONI UFFICIALI", title_style))
-            story.append(Paragraph(f"{campionato_info} | Data: {data_partita}", sub_style))
-            
-            testo_terna = f"<b>Arbitro:</b> Sig. {nome_arbitro}"
-            if assistente_1 or assistente_2:
-                testo_terna += f" | <b>Assistenti:</b> {assistente_1} — {assistente_2}"
-            story.append(Paragraph(testo_terna, arbitro_style))
-            
-            box_casa = [Paragraph(nome_squadra_casa.upper(), team_title_style), Spacer(1, 2)]
-            for g in lista_casa_corretta: box_casa.append(Paragraph(g, player_style))
-            box_casa.append(Spacer(1, 4))
-            box_casa.append(Paragraph(f"<b>All.</b> {c_all_edit.upper() if c_all_edit else ''}", staff_style))
-            
-            box_ospite = [Paragraph(nome_squadra_ospite.upper(), team_title_style), Spacer(1, 2)]
-            for g in lista_ospite_corretta: box_ospite.append(Paragraph(g, player_style))
-            box_ospite.append(Spacer(1, 4))
-            box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit.upper() if o_all_edit else ''}", staff_style))
-            
-            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
-            grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
-            story.append(grid)
-            story.append(Spacer(1, 8))
-            
-            if sponsor_files:
-                blocchi_sponsor = []
-                num_sponsor = min(len(sponsor_files), 5)
-                width_singolo = int(480 / num_sponsor) - 10
-                for idx, s_file in enumerate(sponsor_files[:5]):
-                    try:
-                        img = Image.open(s_file).convert("RGBA")
-                        alpha = img.split()
-                        alpha = ImageEnhance.Brightness(alpha).enhance(0.25)
-                        img.putalpha(alpha)
-                        temp_path = f"temp_sponsor_{idx}.png"
-                        img.save(temp_path)
-                        blocchi_sponsor.append(RLImage(temp_path, width=width_singolo, height=35, kind='proportional'))
-                    except: pass
-                if blocchi_sponsor:
-                    tabella_sponsor = Table([blocchi_sponsor], colWidths=[width_singolo+10]*len(blocchi_sponsor))
-                    tabella_sponsor.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('BOTTOMPADDING', (0,0), (-1,-1), 5)]))
-                    story.append(tabella_sponsor)
-            
-            story.append(Paragraph("INQUADRA IL CODICE PER SCARICARE LE FORMAZIONI SUL TELEFONO", qr_text_style))
-            story.append(Spacer(1, 2))
-            story.append(RLImage("temp_pdf_qr.png", width=65, height=65))
-            
-            def draw_background_fallback(canvas, doc):
-                if not sponsor_files:
-                    canvas.saveState()
-                    canvas.setFont('Helvetica-Bold', 40)
-                    canvas.setFillColor(colors.HexColor("#F2F4F7"))
-                    canvas.translate(297.5, 420.5) 
-                    canvas.rotate(35)
-                    canvas.drawCentredString(0, 100, "SPONSOR UFFICIALE")
-                    canvas.restoreState()
-
-            doc.build(story, onFirstPage=draw_background_fallback, onLaterPages=draw_background_fallback)
-            pdf_bytes = pdf_buffer.getvalue()
-            pdf_buffer.close()
-            
-            st.success("✅ Distinta ad alta precisione generata!")
-            st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
+    st.subheader("🖨️ Stampa e Validazione")
+    
+    pdf_data = genera_pdf_distinte()
+    
+    st.download_button(
+        label="📥 SCARICA DISTINTA UFFICIALE IN PDF (A4)",
+        data=pdf_data,
+        file_name=f"distinta_{data_partita.replace('/', '-')}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
