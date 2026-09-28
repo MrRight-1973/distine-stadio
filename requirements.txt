@@ -3,4 +3,4 @@ pytesseract
 Pillow
 pandas
 reportlab
-qrcode[pil]
+opencv-python-headless
