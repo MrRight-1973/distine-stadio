@@ -84,7 +84,6 @@ def esegui_ocr_cloud_gratuito(uploaded_file, forza_ospite=False):
     """Estrae i dati reali simulando l'analisi strutturale dei moduli FIGC forniti"""
     giocatori, all_nome, squadra_nome = [], "Non rilevato", "SQUADRA STADIO"
     try:
-        # Se forzato come ospite o il nome del file indica il Pettorazza, assegna i dati corrispondenti
         fn = uploaded_file.name.lower()
         if (not forza_ospite and not any(x in fn for x in ["pettorazza", "ospite"])) or (forza_ospite and any(x in fn for x in ["pettorazza", "ospite"])):
             all_nome, squadra_nome = "PETRACIN ALESSANDRO", "AZZURRA DUECARRARE"
@@ -99,13 +98,11 @@ def esegui_ocr_cloud_gratuito(uploaded_file, forza_ospite=False):
     return giocatori[:20], all_nome.title(), squadra_nome.upper()
 
 if foto_casa and foto_ospite:
-    # Controlla se le immagini sono state caricate invertite basandosi sul nome del file
     fn_c = foto_casa.name.lower()
     casa_invertita = any(x in fn_c for x in ["pettorazza", "ospite"])
     
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
         with st.spinner("Scansione e analisi Cloud ad alta precisione delle lettere..."):
-            # Estrazione dei dati tenendo conto della reale disposizione dei file caricate
             g_casa, a_casa, name_casa = esegui_ocr_cloud_gratuito(foto_casa, forza_ospite=casa_invertita)
             g_ospite, a_ospite, name_ospite = esegui_ocr_cloud_gratuito(foto_ospite, forza_ospite=not casa_invertita)
             
@@ -120,7 +117,6 @@ if foto_casa and foto_ospite:
 if st.session_state.dati_pronti:
     st.markdown("---")
     
-    # NUOVO: Pulsante rapido per invertire manualmente le colonne delle squadre a schermo
     if st.button("🔄 INVERTI SQUADRA CASA / OSPITE", use_container_width=True):
         st.session_state.squadra_casa_nome, st.session_state.squadra_ospite_nome = st.session_state.squadra_ospite_nome, st.session_state.squadra_casa_nome
         st.session_state.casa_all_input, st.session_state.ospite_all_input = st.session_state.ospite_all_input, st.session_state.casa_all_input
@@ -190,7 +186,8 @@ if st.session_state.dati_pronti:
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
             
-            grid = Table([[box_casa, box_ospite]], colWidths=)
+            # CONFIGURAZIONE CORRETTA: Inserite le misure fisse simmetriche
+            grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
             story.append(grid)
             story.append(Spacer(1, 8))
