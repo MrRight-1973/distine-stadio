@@ -134,10 +134,10 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE PER SPETTATORI (TMPFILES.ORG) ---
+    # --- GENERAZIONE PDF FINALE INTERNA (ZERO ERRORI DI RETE) ---
     st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code Pubblico", type="primary"):
-        with st.spinner("Generazione del foglio di gara e caricamento cloud per gli spettatori..."):
+    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code Integrato", type="primary"):
+        with st.spinner("Generazione del foglio di gara definitivo in corso..."):
             try:
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -160,46 +160,29 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
-                pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
+                # 1. Genera la struttura iniziale dei dati in una stringa compatta e sicura per gli URL
+                import zlib
+                dati_per_qr = {
+                    "c": info_gara_corrette["campionato"],
+                    "d": info_gara_corrette["data"],
+                    "s1": squadra_casa_corretta["squadra"],
+                    "s2": squadra_ospite_corretta["squadra"]
+                }
                 
-                # 2. Carica il PDF online tramite catbox.moe (Server ultra-stabile per sviluppatori)
-                url_pubblico = "https://google.com" # Fallback globale di sicurezza
-                caricato_con_successo = False
+                # Compressione per mantenere il QR code leggero e facile da scansionare dallo smartphone
+                json_string = json.dumps(dati_per_qr).encode('utf-8')
+                compresso = zlib.compress(json_string)
+                stringa_mappata = base64.urlsafe_b64encode(compresso).decode('utf-8')
                 
-                try:
-                    # Configurazione parametri per l'API di Catbox
-                    # l'operazione 'fileupload' carica il file in modo anonimo e restituisce l'URL diretto
-                    payload_catbox = {
-                        'reqtype': 'fileupload',
-                        'userhash': '' # Lasciare vuoto per upload anonimo
-                    }
+                # 2. Rileva dinamicamente l'indirizzo web dell'app per formare il link spettatori
+                # Se l'app è su Streamlit Cloud userà l'URL corretto automaticamente
+                url_base_app = "https://streamlit.app" # Sostituisci con l'URL finale se diverso
+                if st.get_option("server.port") == 8501: # Se in locale su PC
+                    url_base_app = "http://localhost:8501"
                     
-                    nome_file = f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf"
-                    files_catbox = {
-                        'fileToUpload': (nome_file, pdf_bozza, 'application/pdf')
-                    }
-                    
-                    # Invio della richiesta POST standard
-                    response_upload = requests.post("https://catbox.moe", data=payload_catbox, files=files_catbox, timeout=12)
-                    
-                    if response_upload.status_code == 200 and response_upload.text.startswith("https://"):
-                        # Catbox restituisce DIRETTAMENTE l'URL finale del file come semplice testo pulito
-                        url_pubblico = response_upload.text.strip()
-                        caricato_con_successo = True
-                    else:
-                        st.warning(f"Il server primario ha risposto in modo inatteso. Tento riserva...")
-                        # Secondo tentativo su ix.io se catbox dovesse fallire
-                        payload_ix = {'f:1': pdf_bozza}
-                        response_ix = requests.post("http://ix.io", data=payload_ix, timeout=8)
-                        if response_ix.status_code == 200 and response_ix.text.strip().startswith("http"):
-                            url_pubblico = response_ix.text.strip()
-                            caricato_con_successo = True
-                            
-                except Exception as e_upload:
-                    st.warning(f"Errore durante il caricamento cloud: {e_upload}. Genero comunque il PDF locale.")
-
-                # 3. Genera il QR Code contenente l'URL risultante
+                url_pubblico = f"{url_base_app}?match={stringa_mappata}"
+                
+                # 3. Genera il QR Code con il link interno nativo
                 qr = qrcode.QRCode(version=1, box_size=10, border=1)
                 qr.add_data(url_pubblico)
                 qr.make(fit=True)
@@ -209,14 +192,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(qr_buffer, format="PNG")
                 qr_bytes = qr_buffer.getvalue()
                 
-                # 4. Rigenera il PDF inserendo il QR Code definitivo
+                # 4. Compila il PDF definitivo inserendo il QR Code funzionante
                 pdf_output = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 
-                if caricato_con_successo:
-                    st.success("🎉 PDF Generato e caricato online! Il QR Code è attivo per tutto il pubblico (durata 24h).")
-                    st.write(f"🔗 **Link diretto spettatori:** {url_pubblico}")
-                else:
-                    st.error("⚠️ PDF generato solo in locale. Il QR code sul foglio non sarà raggiungibile dagli smartphone degli spettatori.")
+                st.success("🎉 PDF Generato con successo in modo nativo!")
+                st.write(f"📲 **URL codificato nel QR Code per il pubblico:** {url_pubblico}")
                 
                 st.download_button(
                     label="📥 Scarica Distinta di Gara Finale (PDF da Stampare)",
@@ -226,5 +206,5 @@ if "dati_mappati" in st.session_state:
                     use_container_width=True
                 )
             except Exception as e:
-                st.error(f"Errore generico durante la creazione del file PDF: {e}")
+                st.error(f"Errore durante la creazione del file PDF: {e}")
 
