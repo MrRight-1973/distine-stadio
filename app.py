@@ -192,3 +192,4 @@ if "pdf_interattivo_pronto" in st.session_state:
             label="📥 Scarica PDF su Smartphone",
             data=st.session_state["pdf_interattivo_pronto"],
             file_name="distinta_ufficiale_A4_mobile.pdf",
+            mime="application/pdf",type="primary",use_container_width=True)
