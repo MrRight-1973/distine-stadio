@@ -8,12 +8,13 @@ import io
 import re
 from PIL import Image
 import qrcode
+import pytesseract
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Estrai, correggi eventuali refusi a schermo e stampa il PDF perfetto</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Lettura OCR reale, correzione anagrafiche e impaginazione A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -26,6 +27,10 @@ if "casa_all_input" not in st.session_state:
     st.session_state.casa_all_input = ""
 if "ospite_all_input" not in st.session_state:
     st.session_state.ospite_all_input = ""
+if "squadra_casa_nome" not in st.session_state:
+    st.session_state.squadra_casa_nome = "SQUADRA CASA"
+if "squadra_ospite_nome" not in st.session_state:
+    st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
 
 # 1. SIDEBAR: CONFIGURAZIONE ED ELEMENTI FISSI
 st.sidebar.header("⚙️ Configurazione Partita")
@@ -46,105 +51,110 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def formatta_cognome_nome(testo_grezzo):
-    """
-    Scompone la stringa e forza il Cognome in MAIUSCOLO e il Nome in minuscolo con iniziale maiuscola.
-    Gestisce anche la presenza di note come (C) o (VC) e l'anno di nascita alla fine.
-    """
-    # Rimuove l'anno alla fine se presente per elaborare solo il nome, lo riaggiungiamo dopo
-    match_anno = re.search(r'\(\'\d{2}\)', testo_grezzo)
-    anno_estratto = match_anno.group(0) if match_anno else ""
-    testo_puro = testo_grezzo.replace(anno_estratto, "").strip()
+def analizza_e_formatta_ocr(uploaded_file):
+    """Esegue l'OCR reale sull'immagine e formatta COGNOME Nome ('Anno)"""
+    giocatori_estratti = []
+    allenatore = "Non rilevato"
+    nome_squadra = "SQUADRA"
     
-    # Rileva tag Capitano o ViceCapitano
-    note_ruolo = ""
-    if "(C)" in testo_puro:
-        note_ruolo = " (C)"
-        testo_puro = testo_puro.replace("(C)", "").strip()
-    elif "(VC)" in testo_puro:
-        note_ruolo = " (VC)"
-        testo_puro = testo_puro.replace("(VC)", "").strip()
-    elif "(V)" in testo_puro:
-        note_ruolo = " (V)"
-        testo_puro = testo_puro.replace("(V)", "").strip()
-
-    parti = testo_puro.split()
-    if len(parti) >= 2:
-        # Convenzione distinte FIGC: il primo blocco è il Cognome, il secondo è il Nome
-        cognome = parti[0].upper()
-        nome = " ".join(parti[1:]).title()
-        testo_formattato = f"{cognome} {nome}{note_ruolo}"
-    else:
-        testo_formattato = testo_puro.upper()
+    try:
+        img = Image.open(uploaded_file)
+        # Esegue la lettura del testo in lingua italiana
+        testo = pytesseract.image_to_string(img, lang='ita')
+        righe = testo.split('\n')
         
-    if anno_estratto:
-        testo_formattato = f"{testo_formattato} {anno_estratto}"
-    return testo_formattato
-
-def simula_estrazione_grezza(is_casa=True):
-    if is_casa:
-        all_nome = "PETRACIN ALESSANDRO"
-        giocatori = [
-            "VENTURINI Leonardo ('05)", "ZONZIN Sebastiano ('02)", "PAVAN Marco (VC) ('03)",
-            "MINOGLIO Tommaso ('O4)", "PACCAGNELLA Francesco ('01)", "ZOMPA Alessio ('00)",
-            "CACCO Filippo ('99)", "AGGIO Kevin (C) ('03)", "PIVA Anderson ('02)",
-            "CORASANITI Pietro ('04)", "CORREZZOLA Alberto ('98)", "BELLAMIO Andrea ('96)",
-            "BERGAMASCO Andrea ('01)", "CHECCHINATO Riccardo ('05)", "BOSCAIN Tommaso ('04)",
-            "BOSCARO Tommaso ('03)", "PACCAGNELLA Antonio ('05)", "NALIN Nicholas ('03)",
-            "ALBERTIN Francesco ('02)", "TACCHINATO Pietro ('05)"
-        ]
-    else:
-        all_nome = "SADOCCO MARCO"
-        giocatori = [
-            "CHERUBIN LUCA ('01)", "ROSSI ANDREA ('O2)", "NESE MANUEL ('04)", "BERGO ALEX ('00)",
-            "RANZATO LORENZO ('03)", "CAMISOTTI NICOLAS ('99)", "MAZZETTO MATTEO (C) ('97)",
-            "MORANDI ENRICO ('01)", "MARINELLI LEONARDO ('05)", "BALLARIN ALEX (V) ('03)",
-            "SADELLAH SALAH DINE ('04)", "MATTIOLI ROBERTO ('02)", "ZULIAN DANIELE ('01)",
-            "BRUNELLO DEVIS ('98)", "MARCHI RICCARDO ('05)", "DOMENEGHETTI MARCO ('04)",
-            "MARITAN FRANCESCO ('03)", "BABETTO DIEGO ('O5)", "REDI ALBERTO ('02)",
-            "GRADARA CARLO ALBERTO ('01)"
-        ]
-    # Applica la formattazione grafica richiesta a tutte le righe estratte
-    giocatori_formattati = [formatta_cognome_nome(g) for g in giocatori]
-    return giocatori_formattati, all_nome.title()
+        for riga in righe:
+            riga_clean = riga.strip()
+            if not riga_clean or len(riga_clean) < 4:
+                continue
+            
+            # Cerca il nome della società (es. righe iniziali in maiuscolo)
+            if "SOCIET" in riga_clean.upper() or "SQUADRA" in riga_clean.upper():
+                continue
+                
+            # Identifica l'allenatore
+            if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
+                allenatore = riga_clean.replace("ALLENATORE:", "").replace("All.", "").strip().title()
+                continue
+            
+            # Cerca date di nascita nel formato GG/MM/AAAA o GG/MM/AA
+            match_data = re.search(r'\b(\d{2})/(\d{2})/(\d{2,4})\b', riga_clean)
+            anno_breve = "'00"
+            if match_data:
+                anno_completo = match_data.group(3)
+                anno_breve = f"'{anno_completo[-2:]}"
+                # Rimuove la data dal testo per isolare il nome
+                riga_clean = riga_clean.replace(match_data.group(0), "").strip()
+            
+            # Pulisce il testo da numeri isolati (es. vecchi numeri di maglia letti male)
+            riga_clean = re.sub(r'^\d+[\s\.\-]*', '', riga_clean).strip()
+            
+            # Isola i tag Capitano/Vice
+            ruolo = ""
+            if "(C)" in riga_clean.upper(): ruolo = " (C)"
+            elif "(VC)" in riga_clean.upper() or "(V)" in riga_clean.upper(): ruolo = " (VC)"
+            riga_clean = riga_clean.replace("(C)", "").replace("(VC)", "").replace("(V)", "").strip()
+            
+            # Formatta COGNOME Nome
+            parole = riga_clean.split()
+            if len(parole) >= 2:
+                cognome = parole[0].upper()
+                nome = " ".join(parole[1:]).title()
+                # Evita di inserire righe di rumore o scritte di servizio del modulo FIGC
+                if "DIRIGENTE" not in cognome and "TESSERA" not in cognome and "MEDICO" not in cognome:
+                    giocatori_estratti.append(f"{cognome} {nome}{ruolo} ({anno_breve})")
+                    
+    except Exception as e:
+        st.error(f"Errore durante l'elaborazione OCR: {e}")
+        
+    return giocatori_estratti[:20], allenatore
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI", use_container_width=True):
-        g_casa, a_casa = simula_estrazione_grezza(is_casa=True)
-        g_ospite, a_ospite = simula_estrazione_grezza(is_casa=False)
-        st.session_state.casa_giocatori_input = g_casa
-        st.session_state.casa_all_input = a_casa
-        st.session_state.ospite_giocatori_input = g_ospite
-        st.session_state.ospite_all_input = a_ospite
-        st.session_state.dati_pronti = True
+        with st.spinner("L'Intelligenza Artificiale sta leggendo i file delle distinte..."):
+            g_casa, a_casa = analizza_e_formatta_ocr(foto_casa)
+            g_ospite, a_ospite = analizza_e_formatta_ocr(foto_ospite)
+            
+            # Se l'OCR non rileva abbastanza righe per via della qualità, usa strutture vuote modificabili
+            if not g_casa: g_casa = ["" for _ in range(20)]
+            if not g_ospite: g_ospite = ["" for _ in range(20)]
+            
+            st.session_state.casa_giocatori_input = g_casa
+            st.session_state.casa_all_input = a_casa
+            st.session_state.ospite_giocatori_input = g_ospite
+            st.session_state.ospite_all_input = a_ospite
+            st.session_state.dati_pronti = True
 
 if st.session_state.dati_pronti:
     st.markdown("---")
-    st.warning("📝 **Pannello di Controllo Segreteria:** Modifica o correggi i nomi e gli anni direttamente qui sotto se noti imperfezioni, poi genera il PDF.")
+    st.warning("📝 **Pannello di Controllo Segreteria:** Inserisci i nomi corretti delle società e modifica i giocatori se noti imperfezioni, poi genera il PDF.")
     edit_col1, edit_col2 = st.columns(2)
     lista_casa_corretta = []
     lista_ospite_corretta = []
     
     with edit_col1:
         st.subheader("Modifica SQUADRA CASA")
+        nome_squadra_casa = st.text_input("Nome Società Ospitante (CASA)", st.session_state.squadra_casa_nome)
         c_all_edit = st.text_input("Allenatore Casa", st.session_state.casa_all_input)
         st.markdown("**Giocatori (Progressione automatica):**")
         for idx, giocatore in enumerate(st.session_state.casa_giocatori_input):
             valore_corretto = st.text_input(f"Casa - Maglia {idx+1}", value=giocatore, key=f"c_{idx}")
-            lista_casa_corretta.append(f"{idx+1}. {valore_corretto}")
+            if valore_corretto.strip():
+                lista_casa_corretta.append(f"{idx+1}. {valore_corretto}")
             
     with edit_col2:
         st.subheader("Modifica SQUADRA OSPITE")
+        nome_squadra_ospite = st.text_input("Nome Società Ospite", st.session_state.squadra_ospite_nome)
         o_all_edit = st.text_input("Allenatore Ospite", st.session_state.ospite_all_input)
         st.markdown("**Giocatori (Progressione automatica):**")
         for idx, giocatore in enumerate(st.session_state.ospite_giocatori_input):
             valore_corretto = st.text_input(f"Ospite - Maglia {idx+1}", value=giocatore, key=f"o_{idx}")
-            lista_ospite_corretta.append(f"{idx+1}. {valore_corretto}")
+            if valore_corretto.strip():
+                lista_ospite_corretta.append(f"{idx+1}. {valore_corretto}")
 
     st.markdown("---")
     if st.button("🚀 2. GENERA PDF DEFINITIVO CON CORREZIONI", use_container_width=True):
         with st.spinner("Creazione del PDF compatibile con pagina singola A4..."):
-            c_name, o_name = "AZZURRA DUECARRARE", "A.S.D. PETTORAZZA SAN MARTINO"
             app_url = st.build_info.get("origin", "https://streamlit.io") if hasattr(st, "build_info") else "https://streamlit.io"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=1)
@@ -173,12 +183,12 @@ if st.session_state.dati_pronti:
                 testo_terna += f" | <b>Assistenti:</b> {assistente_1} — {assistente_2}"
             story.append(Paragraph(testo_terna, arbitro_style))
             
-            box_casa = [Paragraph(c_name, team_title_style), Spacer(1, 2)]
+            box_casa = [Paragraph(nome_squadra_casa.upper(), team_title_style), Spacer(1, 2)]
             for g in lista_casa_corretta: box_casa.append(Paragraph(g, player_style))
             box_casa.append(Spacer(1, 4))
             box_casa.append(Paragraph(f"<b>All.</b> {c_all_edit}", staff_style))
             
-            box_ospite = [Paragraph(o_name, team_title_style), Spacer(1, 2)]
+            box_ospite = [Paragraph(nome_squadra_ospite.upper(), team_title_style), Spacer(1, 2)]
             for g in lista_ospite_corretta: box_ospite.append(Paragraph(g, player_style))
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
@@ -214,5 +224,5 @@ if st.session_state.dati_pronti:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta ottimizzata in singola pagina A4 ed esportata!")
-            st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_Verificata_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
+            st.success("✅ Distinta dinamica in singola pagina A4 ed esportata!")
+            st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
