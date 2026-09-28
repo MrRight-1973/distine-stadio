@@ -56,7 +56,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    # CORREZIONE CRITICA: Aggiunto l'indice [0] obbligatorio per le nuove librerie OpenAI
     risultato_grezzo = response.choices[0].message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
@@ -69,7 +68,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     return json.loads(risultato_grezzo)
 
 def genera_pdf(casa, ospite):
-    """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate ed evidenziazione Under"""
+    """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
@@ -79,7 +78,6 @@ def genera_pdf(casa, ospite):
     team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=5, spaceAfter=3)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8.5, leading=10)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8.5, leading=10, fontName="Helvetica-Bold")
-    under_style = ParagraphStyle('UnderStyle', parent=styles['Normal'], fontSize=8.5, leading=10, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Oblique")
     
     story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE</b>", title_style))
     story.append(Spacer(1, 5))
@@ -101,14 +99,8 @@ def genera_pdf(casa, ospite):
         ]
         
         for indice, g in enumerate(dati.get('giocatori', []), start=1):
-            anno = int(g['anno_nascita'])
-            if anno >= 2007:
-                testo_nome = Paragraph(f"{g['cognome_nome']} 🌟 (Under)", under_style)
-                testo_anno = Paragraph(f"<b>{anno}</b>", under_style)
-                stili_celle.append(('BACKGROUND', (0, indice), (-1, indice), colors.HexColor("#E6FFFA")))
-            else:
-                testo_nome = Paragraph(g['cognome_nome'], normal_style)
-                testo_anno = Paragraph(str(anno), normal_style)
+            testo_nome = Paragraph(g['cognome_nome'], normal_style)
+            testo_anno = Paragraph(str(g['anno_nascita']), normal_style)
             tabella_dati.append([testo_nome, testo_anno])
             
         t = Table(tabella_dati, colWidths=[180, 40])
