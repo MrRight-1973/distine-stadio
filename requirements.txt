@@ -1,6 +1,5 @@
 streamlit
-pytesseract
-Pillow
-pandas
-reportlab
-opencv-python-headless
+google-genai
+pillow
+pydantic
+fpdf2
