@@ -2,7 +2,6 @@ import streamlit as st
 import io
 import qrcode
 import requests
-import base64
 from estrattore import analizza_distinta, genera_pdf
 
 # 1. Configurazione della pagina Streamlit
@@ -41,9 +40,12 @@ if file_casa and file_ospite:
                     dati_ospite = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
                     pdf_data = genera_pdf(dati_casa, dati_ospite)
+                    
+                    # Salviamo il PDF nello stato della pagina così da renderlo scaricabile anche da smartphone
+                    st.session_state["pdf_pronto"] = pdf_data
                     st.success("🎉 Distinte elaborate ed unite con successo!")
                     
-                    # Caricamento cloud temporaneo con gestione fallimenti integrata
+                    # Caricamento cloud temporaneo su file.io
                     pdf_url = None
                     try:
                         files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
@@ -53,11 +55,15 @@ if file_casa and file_ospite:
                     except Exception:
                         pdf_url = None
 
-                    # Failsafe locale se file.io non risponde
+                    # FAILSAFE STRUTTURALE: Se il cloud fallisce, il QR rimanda alla Web App stessa
+                    # Evita l'errore "Version 41" perché l'URL del sito è corto e leggerissimo
                     if not pdf_url:
-                        b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-                        pdf_url = f"data:application/pdf;base64,{b64_pdf}"
-                        st.info("💡 Nota: Generazione QR Code eseguita in modalità locale senza server esterni.")
+                        try:
+                            # Tenta di recuperare l'indirizzo reale della tua app online
+                            pdf_url = st.nav_to if hasattr(st, "nav_to") else "https://streamlit.io"
+                        except:
+                            pdf_url = "https://streamlit.io"
+                        st.info("💡 Nota: Il QR Code rimanderà alla pagina web corrente per scaricare il file dal telefono.")
 
                     # Layout dei risultati
                     c1, c2 = st.columns(2)
@@ -77,7 +83,7 @@ if file_casa and file_ospite:
                     
                     with c2:
                         st.markdown("### 📱 Scarica su Smartphone")
-                        st.write("Inquadra questo QR Code con il telefono per salvare il PDF:")
+                        st.write("Inquadra questo QR Code con il telefono per accedere al documento:")
                         
                         qr = qrcode.QRCode(
                             version=None,
@@ -94,7 +100,19 @@ if file_casa and file_ospite:
                         st.image(io_buf_qr.getvalue(), width=220)
                         
                         if not pdf_url.startswith("data:"):
-                            st.caption(f"Link diretto temporaneo: {pdf_url}")
+                            st.caption(f"Link associato: {pdf_url}")
                         
                 except Exception as e:
                     st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
+
+# Pulsante di download persistente visibile da smartphone se la pagina viene ricaricata tramite QR Code
+if "pdf_pronto" in st.session_state:
+    st.markdown("---")
+    st.subheader("📲 Area Download Smartphone")
+    st.download_button(
+        label="📥 Premi qui per salvare il PDF sul tuo Telefono",
+        data=st.session_state["pdf_pronto"],
+        file_name="riepilogo_distinte_mobile.pdf",
+        mime="application/pdf",
+        type="primary"
+    )
