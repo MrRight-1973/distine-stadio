@@ -9,17 +9,15 @@ from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
 st.title("⚽ Centro Gestione Distinte Gara Gestionale")
-st.write("Carica i fogli gara. Le tabelle hanno 20 righe fisse: usa i pulsanti di Shift per far scalare i nomi in automatico.")
+st.write("Carica i fogli gara. Seleziona il numero della riga dal menu a tendina per attivare le opzioni di slittamento automatico.")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
-# Inizializzazione degli stati delle griglie se non presenti
 if "griglia_casa" not in st.session_state:
     st.session_state["griglia_casa"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
 if "griglia_ospite" not in st.session_state:
     st.session_state["griglia_ospite"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
 
-# 1. Caricamento file iniziale
 col_f1, col_f2 = st.columns(2)
 with col_f1:
     st.subheader("🏠 Squadra in Casa")
@@ -44,7 +42,6 @@ if file_casa and file_ospite:
                 except Exception as e:
                     st.error(f"Errore durante l'analisi visiva: {e}")
 
-# --- AREA DI INTERFACCIA E LOGICA DI SHIFT DELLE RIGHE ---
 if "dati_mappati" in st.session_state:
     st.markdown("---")
     st.header("✏️ Fase 2: Controllo, Correzione e Funzioni di Shift")
@@ -65,34 +62,34 @@ if "dati_mappati" in st.session_state:
     st.markdown("---")
     c_sq1, c_sq2 = st.columns(2)
     
+    # Elenco opzioni allineate in base 1 per l'interfaccia utente (da N° 1 a N° 20)
+    opzioni_righe = [i for i in range(1, 21)]
+    
     # --- GESTIONE SQUADRA CASA ---
     with c_sq1:
         st.subheader("🏠 SQUADRA CASA")
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
         edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
-        # Mostra la griglia modificabile
         st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, disabled=["numero"])
         
-        # Funzioni di Shift Casa
-        row_shift_casa = st.number_input("Seleziona N° riga per Shift (Casa)", min_value=1, max_value=20, value=13)
+        # Menu a tendina interattivo per la riga esatta in Base 1
+        riga_scelta_casa = st.selectbox("🎯 Seleziona la riga del Giocatore su cui operare (Casa)", options=opzioni_righe, index=12)
         c_btn1, c_btn2 = st.columns(2)
         with c_btn1:
-            if st.button("⬇️ Slitta in basso (Inserisci riga)", key="shift_down_casa"):
-                idx = row_shift_casa - 1
+            if st.button("⬇️ Slitta in basso (Crea riga vuota al N° selezionato)", key="shift_down_casa"):
+                idx = riga_scelta_casa - 1
                 df = st.session_state["griglia_casa"].copy()
-                # Creiamo una riga vuota da inserire
-                nuova_riga = pd.DataFrame([{"numero": row_shift_casa, "cognome_nome": "", "anno_nascita": ""}])
+                nuova_riga = pd.DataFrame([{"numero": riga_scelta_casa, "cognome_nome": "", "anno_nascita": ""}])
                 df_top = df.iloc[:idx]
-                df_bottom = df.iloc[idx:19] # Taglia l'ultima riga (la 20esima) per rimanere a 20 righe fisse
+                df_bottom = df.iloc[idx:19]
                 df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                # Ripristina i numeri di maglia corretti sequenziali da 1 a 20
                 df_nuovo["numero"] = range(1, 21)
                 st.session_state["griglia_casa"] = df_nuovo
                 st.rerun()
         with c_btn2:
-            if st.button("⬆️ Slitta in alto (Elimina riga)", key="shift_up_casa"):
-                idx = row_shift_casa - 1
+            if st.button("⬆️ Slitta in alto (Cancella giocatore al N° selezionato)", key="shift_up_casa"):
+                idx = riga_scelta_casa - 1
                 df = st.session_state["griglia_casa"].copy()
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx+1:]
@@ -110,14 +107,13 @@ if "dati_mappati" in st.session_state:
         
         st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, disabled=["numero"])
         
-        # Funzioni di Shift Ospite
-        row_shift_ospite = st.number_input("Seleziona N° riga per Shift (Ospite)", min_value=1, max_value=20, value=13)
+        riga_scelta_ospite = st.selectbox("🎯 Seleziona la riga del Giocatore su cui operare (Ospite)", options=opzioni_righe, index=12)
         o_btn1, o_btn2 = st.columns(2)
         with o_btn1:
-            if st.button("⬇️ Slitta in basso (Inserisci riga)", key="shift_down_ospite"):
-                idx = row_shift_ospite - 1
+            if st.button("⬇️ Slitta in basso (Crea riga vuota al N° selezionato)", key="shift_down_ospite"):
+                idx = riga_scelta_ospite - 1
                 df = st.session_state["griglia_ospite"].copy()
-                nuova_riga = pd.DataFrame([{"numero": row_shift_ospite, "cognome_nome": "", "anno_nascita": ""}])
+                nuova_riga = pd.DataFrame([{"numero": riga_scelta_ospite, "cognome_nome": "", "anno_nascita": ""}])
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx:19]
                 df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
@@ -125,8 +121,8 @@ if "dati_mappati" in st.session_state:
                 st.session_state["griglia_ospite"] = df_nuovo
                 st.rerun()
         with c_btn2:
-            if st.button("⬆️ Slitta in alto (Elimina riga)", key="shift_up_ospite"):
-                idx = row_shift_ospite - 1
+            if st.button("⬆️ Slitta in alto (Cancella giocatore al N° selezionato)", key="shift_up_ospite"):
+                idx = riga_scelta_ospite - 1
                 df = st.session_state["griglia_ospite"].copy()
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx+1:]
@@ -192,4 +188,7 @@ if "pdf_interattivo_pronto" in st.session_state:
             label="📥 Scarica PDF su Smartphone",
             data=st.session_state["pdf_interattivo_pronto"],
             file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",type="primary",use_container_width=True)
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
