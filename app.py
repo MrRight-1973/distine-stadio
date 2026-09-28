@@ -57,7 +57,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         ],
         temperature=0.0
     )
-    return json.loads(response.choices.message.content)
+    return json.loads(response.choices[0].message.content)
 
 def genera_pdf(casa, ospite):
     """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate"""
