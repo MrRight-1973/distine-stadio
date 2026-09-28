@@ -62,7 +62,8 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices.message.content.strip()
+    # CORREZIONE CRITICA: Aggiunto l'indice obbligatorio per l'estrazione dati
+    risultato_grezzo = response.choices[0].message.content.strip()
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
         risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
@@ -124,7 +125,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[270, 210])
+    t_info = Table(tabella_info_dati, colWidths=[270, 200])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
         ('TOPPADDING', (0,0), (-1,-1), 1.5),
@@ -180,7 +181,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             testo_anno = Paragraph(str(g.get('ANNO', '')), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[25, 195, 45])
+        t = Table(tabella_dati, colWidths=[20, 205, 40])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
