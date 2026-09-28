@@ -9,14 +9,14 @@ from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
 st.title("⚽ Centro Gestione Distinte Gara Gestionale")
-st.write("Carica i fogli gara. Seleziona il numero della riga dal menu a tendina per attivare le opzioni di slittamento automatico.")
+st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sulle liste.")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
 if "griglia_casa" not in st.session_state:
-    st.session_state["griglia_casa"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
+    st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 if "griglia_ospite" not in st.session_state:
-    st.session_state["griglia_ospite"] = pd.DataFrame([{"numero": i, "cognome_nome": "", "anno_nascita": ""} for i in range(1, 21)])
+    st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 
 col_f1, col_f2 = st.columns(2)
 with col_f1:
@@ -34,8 +34,8 @@ if file_casa and file_ospite:
                     casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                     ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
-                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"])
-                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"])
+                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
+                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
                     st.session_state["macro_info"] = {"campionato": casa_raw["campionato"], "data": casa_raw["data"], "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"], "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]}
                     st.session_state["dati_mappati"] = True
                     st.rerun()
@@ -70,80 +70,85 @@ if "dati_mappati" in st.session_state:
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
         edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
-        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, disabled=["numero"])
+        # Rimossa l'estensione 0-19 nascondendo l'indice nativo di Pandas
+        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
         
-        riga_scelta_casa = st.selectbox("🎯 Seleziona la riga del Giocatore su cui operare (Casa)", options=opzioni_righe, index=12)
+        riga_scelta_casa = st.selectbox("🎯 Seleziona N° riga su cui operare (Casa)", options=opzioni_righe, index=12)
         c_btn1, c_btn2 = st.columns(2)
         with c_btn1:
-            if st.button("⬇️ Slitta in basso (Crea riga vuota al N° selezionato)", key="shift_down_casa"):
+            if st.button("⬇️ Slitta in basso (Casa)", key="shift_down_casa", use_container_width=True):
+                df = st.session_state["griglia_casa"].copy().reset_index()
                 idx = riga_scelta_casa - 1
-                df = st.session_state["griglia_casa"].copy()
-                nuova_riga = pd.DataFrame([{"numero": riga_scelta_casa, "cognome_nome": "", "anno_nascita": ""}])
+                nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx:19]
                 df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["numero"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo
+                df_nuovo["N°"] = range(1, 21)
+                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
                 st.rerun()
         with c_btn2:
-            if st.button("⬆️ Slitta in alto (Cancella giocatore al N° selezionato)", key="shift_up_casa"):
+            if st.button("⬆️ Slitta in alto (Casa)", key="shift_up_casa", use_container_width=True):
+                df = st.session_state["griglia_casa"].copy().reset_index()
                 idx = riga_scelta_casa - 1
-                df = st.session_state["griglia_casa"].copy()
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"numero": 20, "cognome_nome": "", "anno_nascita": ""}])
+                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
                 df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["numero"] = range(1, 21)
-                st.session_state["griglia_casa"] = df_nuovo
+                df_nuovo["N°"] = range(1, 21)
+                st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
                 st.rerun()
 
-    # --- GESTIONE SQUADRA OSPITE ---
+    # --- GESTIONE SQUADRA OSPITE (SIMMETRICA ED ALLINEATA) ---
     with c_sq2:
         st.subheader("🚀 SQUADRA OSPITE")
         edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
         edit_all_ospite = st.text_input("Allenatore Ospite", value=info["all_ospite"])
         
-        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, disabled=["numero"])
+        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, hide_index=False)
         
-        riga_scelta_ospite = st.selectbox("🎯 Seleziona la riga del Giocatore su cui operare (Ospite)", options=opzioni_righe, index=12)
+        riga_scelta_ospite = st.selectbox("🎯 Seleziona N° riga su cui operare (Ospite)", options=opzioni_righe, index=12)
         o_btn1, o_btn2 = st.columns(2)
         with o_btn1:
-            if st.button("⬇️ Slitta in basso (Crea riga vuota al N° selezionato)", key="shift_down_ospite"):
+            if st.button("⬇️ Slitta in basso (Ospite)", key="shift_down_ospite", use_container_width=True):
+                df = st.session_state["griglia_ospite"].copy().reset_index()
                 idx = riga_scelta_ospite - 1
-                df = st.session_state["griglia_ospite"].copy()
-                nuova_riga = pd.DataFrame([{"numero": riga_scelta_ospite, "cognome_nome": "", "anno_nascita": ""}])
+                nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx:19]
                 df_nuovo = pd.concat([df_top, nuova_riga, df_bottom]).reset_index(drop=True)
-                df_nuovo["numero"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo
+                df_nuovo["N°"] = range(1, 21)
+                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                 st.rerun()
         with c_btn2:
-            if st.button("⬆️ Slitta in alto (Cancella giocatore al N° selezionato)", key="shift_up_ospite"):
+            if st.button("⬆️ Slitta in alto (Ospite)", key="shift_up_ospite", use_container_width=True):
+                df = st.session_state["griglia_ospite"].copy().reset_index()
                 idx = riga_scelta_ospite - 1
-                df = st.session_state["griglia_ospite"].copy()
                 df_top = df.iloc[:idx]
                 df_bottom = df.iloc[idx+1:]
-                riga_vuota_finale = pd.DataFrame([{"numero": 20, "cognome_nome": "", "anno_nascita": ""}])
+                riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
                 df_nuovo = pd.concat([df_top, df_bottom, riga_vuota_finale]).reset_index(drop=True)
-                df_nuovo["numero"] = range(1, 21)
-                st.session_state["griglia_ospite"] = df_nuovo
+                df_nuovo["N°"] = range(1, 21)
+                st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                 st.rerun()
 
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
-    if st.button("⚡ Fase 3: Confirm e Genera PDF A4 con QR Code", type="primary"):
+    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
+                # Ripristiniamo la struttura a dizionario leggendo l'indice N° corrente per il PDF
+                giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
+                giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
+                
                 squadra_casa_corretta = {
                     "squadra": pulisci_testo(edit_nome_casa),
                     "allenatore": pulisci_testo(edit_all_casa),
-                    "giocatori": st.session_state["griglia_casa"].to_dict(orient="records")
+                    "giocatori": giocatori_casa_salvati
                 }
                 squadra_ospite_corretta = {
                     "squadra": pulisci_testo(edit_nome_ospite),
                     "allenatore": pulisci_testo(edit_all_ospite),
-                    "giocatori": st.session_state["griglia_ospite"].to_dict(orient="records")
+                    "giocatori": giocatori_ospite_salvati
                 }
                 info_gara_corrette = {
                     "campionato": pulisci_testo(edit_campionato),
@@ -184,9 +189,4 @@ if "pdf_interattivo_pronto" in st.session_state:
     with c_dl2:
         st.download_button(
             label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+data=st.session_state["pdf_interattivo_pronto"],file_name="distinta_ufficiale_A4_mobile.pdf",mime="application/pdf",type="primary",use_container_width=True)
