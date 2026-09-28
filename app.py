@@ -62,7 +62,6 @@ if "dati_mappati" in st.session_state:
     st.markdown("---")
     c_sq1, c_sq2 = st.columns(2)
     
-    # Elenco opzioni allineate in base 1 per l'interfaccia utente (da N° 1 a N° 20)
     opzioni_righe = [i for i in range(1, 21)]
     
     # --- GESTIONE SQUADRA CASA ---
@@ -73,7 +72,6 @@ if "dati_mappati" in st.session_state:
         
         st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, disabled=["numero"])
         
-        # Menu a tendina interattivo per la riga esatta in Base 1
         riga_scelta_casa = st.selectbox("🎯 Seleziona la riga del Giocatore su cui operare (Casa)", options=opzioni_righe, index=12)
         c_btn1, c_btn2 = st.columns(2)
         with c_btn1:
@@ -134,7 +132,7 @@ if "dati_mappati" in st.session_state:
 
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
+    if st.button("⚡ Fase 3: Confirm e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
                 squadra_casa_corretta = {
