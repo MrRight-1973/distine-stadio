@@ -8,13 +8,13 @@ import io
 import re
 from PIL import Image, ImageEnhance
 import qrcode
-import pypdf
+import pytesseract
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Estrazione PDF F.I.G.C. nativa ad altissima precisione e stampa A4</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione FOTO reale, correzione a schermo e stampa A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -35,7 +35,7 @@ if "squadra_ospite_nome" not in st.session_state:
 # 1. SIDEBAR: CONFIGURAZIONE
 st.sidebar.header("⚙️ Configurazione Partita")
 data_partita = st.sidebar.text_input("Data della partita", "28/09/2026")
-canyonato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
+campionato_info = st.sidebar.text_input("Campionato / Girone", "1° Categoria - Girone E")
 
 st.sidebar.header("🏢 Pannello Sponsor (Max 5)")
 sponsor_files = st.sidebar.file_uploader("Carica i loghi degli sponsor (PNG/JPG)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
@@ -48,52 +48,60 @@ nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "")
 assistente_1 = st.sidebar.text_input("Assistente 1", "")
 assistente_2 = st.sidebar.text_input("Assistente 2", "")
 
-st.subheader("📄 Carica i file PDF delle distinte F.I.G.C.")
+st.subheader("📸 Carica le FOTO delle distinte")
 col1, col2 = st.columns(2)
 
 with col1:
-    file_casa = st.file_uploader("Distinta PDF Squadra CASA", type=["pdf"])
+    foto_casa = st.file_uploader("Foto Distinta Squadra CASA", type=["png", "jpg", "jpeg"])
 with col2:
-    file_ospite = st.file_uploader("Distinta PDF Squadra OSPITE", type=["pdf"])
+    foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def formatta_stringa_giocatore_pdf(testo_grezzo):
-    """Formatta la riga del giocatore salvaguardando caratteri speciali e ruoli"""
-    # Isola l'anno di nascita
+def formatta_grafica_conservativa(testo_grezzo):
+    """Formatta la riga in COGNOME Nome ('Anno) senza distruggere lettere importanti o tag di capitano"""
+    testo_grezzo = testo_grezzo.strip()
+    if not testo_grezzo:
+        return ""
+        
+    # Isola l'anno di nascita prima di ripulire (2 cifre finali o staccate)
     match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
     anno = f"'{match_anno.group(2)}" if match_anno else ""
     
-    # Rileva ruoli Capitano o Vice
+    # Isola e protegge i tag Capitano e Vice
     ruolo = ""
     if "(C)" in testo_grezzo.upper() or " C " in testo_grezzo.upper(): ruolo = " (C)"
     elif any(x in testo_grezzo.upper() for x in ["(VC)", "(V)", " VC "]): ruolo = " (VC)"
     
-    # Rimuove numeri di maglia provvisori e tessere FIGC lunghe
+    # Rimuove solo i lunghi numeri di tessera FIGC (4 o più cifre consecutive) per non toccare i nomi brevi
     testo_puro = re.sub(r'\b\d{4,9}\b', '', testo_grezzo)
-    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_puro).strip()
+    # Rimuove l'eventuale numero di maglia iniziale letto nella colonna di sinistra
+    testo_puro = re.sub(r'^\d+[\s\.\-]*', '', testo_puro).strip()
     
+    # Elimina i vecchi simboli per evitare duplicati
+    testo_puro = testo_puro.replace("(C)", "").replace("(VC)", "").replace("(V)", "").strip()
+    
+    # Divide le parole per mettere il Cognome in MAIUSCOLO e il Nome in minuscolo
     parole = [p for p in testo_puro.split() if p.upper() not in ["C", "VC", "V", "DIRIGENTE", "MEDICO"]]
     if len(parole) >= 2:
-        cognome = parole[0].upper()
+        cognome = parole.upper()
         nome = " ".join(parole[1:]).title()
         res = f"{cognome} {nome}{ruolo}"
         return f"{res} ({anno})" if anno else res
     elif len(parole) == 1:
-        res = parole[0].upper() + ruolo
+        res = parole.upper() + ruolo
         return f"{res} ({anno})" if anno else res
     return ""
 
-def estrai_dati_da_pdf_nativo(uploaded_pdf):
-    """Legge il testo digitale interno al file PDF F.I.G.C. con precisione assoluta"""
+def esegui_ocr_foto_reale(uploaded_file):
+    """Sfrutta il motore Tesseract integrato nel server Linux di Streamlit per leggere la foto"""
     giocatori = []
     all_nome = "Non rilevato"
     squadra_nome = "SQUADRA RILEVATA"
     try:
-        reader = pypdf.PdfReader(uploaded_pdf)
-        testo_completo = ""
-        for pagina in reader.pages:
-            testo_completo += pagina.extract_text() + "\n"
-            
-        righe = testo_completo.split("\n")
+        img = Image.open(uploaded_file)
+        # Esegue la scansione in lingua italiana utilizzando i dizionari di packages.txt
+        testo = pytesseract.image_to_string(img, lang='ita')
+        righe = testo.split('\n')
+        
         for riga in righe:
             riga_clean = riga.strip()
             if len(riga_clean) < 4 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO"]):
@@ -107,7 +115,7 @@ def estrai_dati_da_pdf_nativo(uploaded_pdf):
                 squadra_nome = riga_clean.upper().strip()
                 continue
                 
-            testo_formattato = formatta_stringa_giocatore_pdf(riga_clean)
+            testo_formattato = formatta_grafica_conservativa(riga_clean)
             if testo_formattato and len(giocatori) < 20:
                 giocatori.append(testo_formattato)
     except:
@@ -117,14 +125,14 @@ def estrai_dati_da_pdf_nativo(uploaded_pdf):
         giocatori.append("")
     return giocatori[:20], all_nome.title(), squadra_nome
 
-if file_casa and file_ospite:
-    if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DA PDF", use_container_width=True):
-        with st.spinner("Estrazione digitale istantanea dai file PDF..."):
-            g_casa, a_casa, name_casa = estrai_dati_da_pdf_nativo(file_casa)
-            g_ospite, a_ospite, name_ospite = estrai_dati_da_pdf_nativo(file_ospite)
+if foto_casa and foto_ospite:
+    if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
+        with st.spinner("Il motore Tesseract sta estraendo i caratteri dalle immagini..."):
+            g_casa, a_casa, name_casa = esegui_ocr_foto_reale(foto_casa)
+            g_ospite, a_ospite, name_ospite = esegui_ocr_foto_reale(foto_ospite)
             
-            # Controllo incrociato: se la segreteria inverte l'ordine dei file PDF, l'app scambia i blocchi in automatico
-            if "pettorazza" in file_casa.name.lower() or "ospite" in file_casa.name.lower():
+            # Algoritmo di scambio automatico: se la segreteria inverte l'ordine delle foto, l'app sistema le colonne
+            if "pettorazza" in foto_casa.name.lower() or "ospite" in foto_casa.name.lower():
                 st.session_state.casa_giocatori_input = g_ospite
                 st.session_state.casa_all_input = a_ospite
                 st.session_state.squadra_casa_nome = name_ospite
@@ -143,7 +151,7 @@ if file_casa and file_ospite:
 
 if st.session_state.dati_pronti:
     st.markdown("---")
-    st.warning("📝 **Pannello di Controllo Segreteria:** Dati estratti digitalmente al 100%. Rivedi l'elenco e clicca per stampare il PDF.")
+    st.warning("📝 **Pannello di Controllo Segreteria:** Dati estratti dalle immagini. Correggi eventuali lettere sfocate direttamente qui sotto prima di stampare.")
     edit_col1, edit_col2 = st.columns(2)
     lista_casa_corretta, lista_ospite_corretta = [], []
     
@@ -189,7 +197,7 @@ if st.session_state.dati_pronti:
             qr_text_style = ParagraphStyle('QT', fontSize=7.5, leading=10, alignment=1, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold")
 
             story.append(Paragraph("FORMAZIONI UFFICIALI", title_style))
-            story.append(Paragraph(f"{canyonato_info} | Data: {data_partita}", sub_style))
+            story.append(Paragraph(f"{campionato_info} | Data: {data_partita}", sub_style))
             
             testo_terna = f"<b>Arbitro:</b> Sig. {nome_arbitro}"
             if assistente_1 or assistente_2:
@@ -248,5 +256,5 @@ if st.session_state.dati_pronti:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta ad altissima precisione generata!")
+            st.success("✅ Distinta da foto generata con successo!")
             st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
