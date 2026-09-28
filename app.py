@@ -2,13 +2,14 @@ import streamlit as st
 import io
 import qrcode
 import requests
+import base64
 import pandas as pd
 from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
 st.title("⚽ Centro Gestione Distinte Gara Interattivo")
-st.write("Carica i fogli gara, modifica o correggi a mano i dati estratti dall'AI, e genera il PDF A4 con QR Code integrato.")
+st.write("Carica i fogli gara, modifica le tabelle e correggi/aggiungi a mano i giocatori mancanti.")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
@@ -32,18 +33,17 @@ if file_casa and file_ospite:
                     st.session_state["dati_iniziali_estratti"] = {"casa": casa_raw, "ospite": ospite_raw}
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Errore durante l'analisi visiva: {e}")
+                    st.error(f"Errore durante l'analis visiva: {e}")
 
-# --- AREA DI CORREZIONE MANUALE A SCHERMO ---
+# --- AREA DI CORREZIONE E AGGIUNTA MANUALE ---
 if "dati_iniziali_estratti" in st.session_state:
     st.markdown("---")
-    st.header("✏️ Fase 2: Controllo e Correzione Manuale dei Dati")
-    st.info("Clicca sulle caselle di testo o sulle tabelle qui sotto per modificare o correggere a mano eventuali nomi, anni o scritte prima di salvare.")
+    st.header("✏️ Fase 2: Controllo e Aggiunta Manuale")
+    st.info("💡 SE MANCA UN GIOCATORE (es. BOSCAIN): Clicca sull'icona '+' in fondo alla tabella per aggiungere una nuova riga e inserire i dati a mano!")
     
     casa_data = st.session_state["dati_iniziali_estratti"]["casa"]
     ospite_data = st.session_state["dati_iniziali_estratti"]["ospite"]
     
-    # Intestazione Arbitri e Gara
     st.subheader("🏁 Informazioni Generali Match")
     c_g1, c_g2 = st.columns(2)
     with c_g1:
@@ -57,38 +57,36 @@ if "dati_iniziali_estratti" in st.session_state:
         
     st.markdown("---")
     
-    # Sezione Squadre ed Editor Tabelle Giocatori
     c_sq1, c_sq2 = st.columns(2)
     
     with c_sq1:
-        st.subheader("🏠 Modifica Dati SQUADRA CASA")
+        st.subheader("🏠 SQUADRA CASA")
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=casa_data.get("squadra", ""))
         edit_all_casa = st.text_input("Allenatore Ospitante", value=casa_data.get("allenatore", ""))
         
-        # Converte la lista giocatori in un DataFrame Pandas per renderlo editabile in una griglia tipo Excel
         df_casa = pd.DataFrame(casa_data.get("giocatori", []))
         if df_casa.empty:
             df_casa = pd.DataFrame(columns=["numero", "cognome_nome", "anno_nascita"])
-        st.write("📋 Lista Calciatori (Fai doppio clic su una cella per modificarla):")
+        
+        # Abilitiamo num_rows="dynamic" per permettere all'utente di aggiungere/rimuovere righe a mano
         editor_casa = st.data_editor(df_casa, num_rows="dynamic", key="edit_grid_casa", use_container_width=True)
         
     with c_sq2:
-        st.subheader("🚀 Modifica Dati SQUADRA OSPITE")
+        st.subheader("🚀 SQUADRA OSPITE")
         edit_nome_ospite = st.text_input("Nome Società Ospite", value=ospite_data.get("squadra", ""))
         edit_all_ospite = st.text_input("Allenatore Ospite", value=ospite_data.get("allenatore", ""))
         
         df_ospite = pd.DataFrame(ospite_data.get("giocatori", []))
         if df_ospite.empty:
             df_ospite = pd.DataFrame(columns=["numero", "cognome_nome", "anno_nascita"])
-        st.write("📋 Lista Calciatori (Fai doppio clic su una cella per modificarla):")
+            
         editor_ospite = st.data_editor(df_ospite, num_rows="dynamic", key="edit_grid_ospite", use_container_width=True)
 
-    # --- GENERAZIONE FINALE PDF CON QR CODE STAMPATO ---
+    # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
-                # Ricostruzione dei dizionari applicando le modifiche manuali dell'utente
                 squadra_casa_corretta = {
                     "squadra": pulisci_testo(edit_nome_casa),
                     "allenatore": pulisci_testo(edit_all_casa),
@@ -107,10 +105,8 @@ if "dati_iniziali_estratti" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Definiamo l'URL della Web App per il QR code
                 pdf_url = "https://streamlit.io"
                 
-                # Generiamo i byte fisici del QR Code
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -119,7 +115,6 @@ if "dati_iniziali_estratti" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generiamo il PDF A4 passando i dati corretti a mano e i byte del QR Code stampabile
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.success("🎉 Documento A4 unificato e QR Code pronti per il download!")
@@ -127,7 +122,6 @@ if "dati_iniziali_estratti" in st.session_state:
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
 
-# Pulsanti di salvataggio finale
 if "pdf_interattivo_pronto" in st.session_state:
     st.write("")
     c_dl1, c_dl2 = st.columns(2)
