@@ -46,6 +46,41 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
+def formatta_cognome_nome(testo_grezzo):
+    """
+    Scompone la stringa e forza il Cognome in MAIUSCOLO e il Nome in minuscolo con iniziale maiuscola.
+    Gestisce anche la presenza di note come (C) o (VC) e l'anno di nascita alla fine.
+    """
+    # Rimuove l'anno alla fine se presente per elaborare solo il nome, lo riaggiungiamo dopo
+    match_anno = re.search(r'\(\'\d{2}\)', testo_grezzo)
+    anno_estratto = match_anno.group(0) if match_anno else ""
+    testo_puro = testo_grezzo.replace(anno_estratto, "").strip()
+    
+    # Rileva tag Capitano o ViceCapitano
+    note_ruolo = ""
+    if "(C)" in testo_puro:
+        note_ruolo = " (C)"
+        testo_puro = testo_puro.replace("(C)", "").strip()
+    elif "(VC)" in testo_puro:
+        note_ruolo = " (VC)"
+        testo_puro = testo_puro.replace("(VC)", "").strip()
+    elif "(V)" in testo_puro:
+        note_ruolo = " (V)"
+        testo_puro = testo_puro.replace("(V)", "").strip()
+
+    parti = testo_puro.split()
+    if len(parti) >= 2:
+        # Convenzione distinte FIGC: il primo blocco è il Cognome, il secondo è il Nome
+        cognome = parti[0].upper()
+        nome = " ".join(parti[1:]).title()
+        testo_formattato = f"{cognome} {nome}{note_ruolo}"
+    else:
+        testo_formattato = testo_puro.upper()
+        
+    if anno_estratto:
+        testo_formattato = f"{testo_formattato} {anno_estratto}"
+    return testo_formattato
+
 def simula_estrazione_grezza(is_casa=True):
     if is_casa:
         all_nome = "PETRACIN ALESSANDRO"
@@ -69,7 +104,9 @@ def simula_estrazione_grezza(is_casa=True):
             "MARITAN FRANCESCO ('03)", "BABETTO DIEGO ('O5)", "REDI ALBERTO ('02)",
             "GRADARA CARLO ALBERTO ('01)"
         ]
-    return giocatori, all_nome
+    # Applica la formattazione grafica richiesta a tutte le righe estratte
+    giocatori_formattati = [formatta_cognome_nome(g) for g in giocatori]
+    return giocatori_formattati, all_nome.title()
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI", use_container_width=True):
