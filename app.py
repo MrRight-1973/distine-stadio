@@ -1,4 +1,4 @@
-import streamlit as st
+cimport streamlit as st
 import base64
 import json
 import io
@@ -28,7 +28,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
     """Invia la foto a OpenAI ed estrae i dati strutturati garantendo il formato richiesto"""
     base64_image = encode_image(uploaded_file)
     
-    # ATTENZIONE: La parola 'json' deve comparire esplicitamente nel prompt di sistema
     prompt_sistema = (
         "Sei un assistente esperto di calcio LND. Analizza la distinta gara e restituisci un oggetto json valido. "
         "Devi estrarre obbligatoriamente:\n"
@@ -45,7 +44,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         "}"
     )
     
-    # Forziamo anche il prompt utente a contenere il termine 'json' per rimuovere il conflitto
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         response_format={ "type": "json_object" },
@@ -62,7 +60,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content.strip()
+    risultato_grezzo = response.choices.message.content.strip()
     
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
@@ -81,8 +79,6 @@ def genera_pdf(casa, ospite):
     team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=5, spaceAfter=3)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8.5, leading=10)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8.5, leading=10, fontName="Helvetica-Bold")
-    
-    # Stile specifico per i fuoriquota (testo blu scuro in corsivo)
     under_style = ParagraphStyle('UnderStyle', parent=styles['Normal'], fontSize=8.5, leading=10, textColor=colors.HexColor("#1A365D"), fontName="Helvetica-Oblique")
     
     story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE</b>", title_style))
@@ -97,7 +93,6 @@ def genera_pdf(casa, ospite):
         
         tabella_dati = [[Paragraph("<b>Giocatore</b>", bold_style), Paragraph("<b>Anno</b>", bold_style)]]
         
-        # Array di configurazione degli stili di riga per l'estetica ReportLab
         stili_celle = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -108,12 +103,9 @@ def genera_pdf(casa, ospite):
         
         for indice, g in enumerate(dati.get('giocatori', []), start=1):
             anno = int(g['anno_nascita'])
-            
-            # REGOLE FUORIQUOTA STAGIONE 2026/2027 LND (Under 2007 e 2008)
             if anno >= 2007:
                 testo_nome = Paragraph(f"{g['cognome_nome']} 🌟 (Under)", under_style)
                 testo_anno = Paragraph(f"<b>{anno}</b>", under_style)
-                # Applica uno sfondo verde chiarissimo alla riga del giovane fuoriquota
                 stili_celle.append(('BACKGROUND', (0, indice), (-1, indice), colors.HexColor("#E6FFFA")))
             else:
                 testo_nome = Paragraph(g['cognome_nome'], normal_style)
@@ -121,7 +113,7 @@ def genera_pdf(casa, ospite):
                 
             tabella_dati.append([testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[185, 40])
+        t = Table(tabella_dati, colWidths=[180, 45])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -168,7 +160,6 @@ if file_casa and file_ospite:
                 pdf_data = genera_pdf(dati_casa, dati_ospite)
                 st.success("🎉 Distinte elaborate ed unite con successo!")
                 
-                # Invio al cloud temporaneo file.io per aggirare il limite dimensionale dei QR
                 files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
                 response_cloud = requests.post('https://file.io', files=files)
                 
@@ -213,3 +204,4 @@ if file_casa and file_ospite:
                     st.caption(f"Link diretto temporaneo: {pdf_url}")
                     
             except Exception as e:
+                st.error(f"Si è verificato un errore durante l'elaborazione dei file: {e}")
