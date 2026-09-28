@@ -33,7 +33,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Il tuo compito principale è scansionare la griglia dei calciatori. "
+        "Sei un assistant esperto di calcio LND. Il tuo compito principale è scansionare la griglia dei calciatori. "
         "Devi leggere la tabella seguendo obbligatoriamente l'ordine dei NUMERI DI MAGLIA da 1 a 20. Non saltare nessuna riga. "
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
@@ -63,7 +63,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content
+    risultato_grezzo = response.choices.message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
@@ -97,7 +97,6 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     
-    # Costruzione della macro-intestazione (Testo a sinistra, QR Code a destra)
     elementi_sinistra = [
         Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style),
         Spacer(1, 4)
@@ -108,22 +107,21 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[200, 220])
+    t_info = Table(tabella_info_dati, colWidths=[240, 240])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
         ('TOPPADDING', (0,0), (-1,-1), 1.5),
     ]))
     elementi_sinistra.append(t_info)
     
-    # Se il QR Code è presente, lo affianchiamo all'intestazione
     if qr_code_bytes:
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=55, height=55)
         tabella_header_dati = [[elementi_sinistra, img_qr_pdf]]
-        t_header = Table(tabella_header_dati, colWidths=[450, 60])
+        t_header = Table(tabella_header_dati, colWidths=[485, 65])
     else:
         tabella_header_dati = [[elementi_sinistra, ""]]
-        t_header = Table(tabella_header_dati, colWidths=[450, 60])
+        t_header = Table(tabella_header_dati, colWidths=[485, 65])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -133,7 +131,6 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     story.append(t_header)
     story.append(Spacer(1, 4))
     
-    # Generazione tabelle squadre
     def genera_tabella_squadra(dati, etichetta):
         elementi_squadra = []
         elementi_squadra.append(Paragraph(f"<b>{etichetta}</b>", team_title_style))
@@ -156,7 +153,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             testo_anno = Paragraph(str(g.get('anno_nascita', '')), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[25, 195, 40])
+        t = Table(tabella_dati, colWidths=[25, 185, 40])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -165,7 +162,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[260, 15, 260])
+    macro_tabella = Table(macro_tabella_dati, colWidths=[250, 50, 250])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
