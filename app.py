@@ -107,47 +107,122 @@ def formatta_riga_giocatore_reale(testo_grezzo):
     return ""
 
 def esegui_ocr_foto_reale(uploaded_file):
-    """Analisi con pre-elaborazione dell'immagine mirata a contrastare l'inchiostro sbiadito dei moduli"""
-    giocatori = []
-    all_nome = ""
+    """
+    Isola geometricamente le colonne 'Nome e Cognome' e 'Data di nascita'
+    abbinando i dati riga per riga tramite coordinate pixel.
+    """
+    giocatori_estratti = []
     squadra_nome = "SQUADRA RILEVATA"
+    all_nome = ""
+    
     try:
-        img = Image.open(uploaded_file)
-        img = img.convert('L')
-        # Contrasto elevato per separare le scritte a penna/timbro dallo sfondo del foglio
+        img = Image.open(uploaded_file).convert('L')
         img = ImageEnhance.Contrast(img).enhance(2.5)
         
-        # Lettura mirata per blocchi di testo strutturati
-        testo = pytesseract.image_to_string(img, lang='ita', config='--psm 6')
-        righe = testo.split('\n')
+        # Estraiamo i dati completi di coordinate (x, y, larghezza, altezza, testo)
+        dati_ocr = pytesseract.image_to_data(img, lang='ita', output_type=pytesseract.Output.DICT)
         
-        for riga in righe:
-            riga_clean = riga.strip()
-            if len(riga_clean) < 5 or any(x in riga_clean.upper() for x in ["FEDERAZIONE", "CAMPIONATO", "COMITATO", "COMUNICATO", "TABELLONE"]):
-                continue
-                
-            # Identificazione Allenatore
-            if any(x in riga_clean.upper() for x in ["ALLENATORE", "ALL."]):
-                all_pulito = re.sub(r'(ALLENATORE|ALL\.)', '', riga_clean, flags=re.IGNORECASE)
-                all_nome = formatta_riga_giocatore_reale(all_pulito).replace(" (C)", "").replace(" (VC)", "")
-                continue
-                
-            # Identificazione Nome Squadra
-            if any(x in riga_clean.upper() for x in ["ASD", "F.C.", "AC", "CLUB", "SOCIETA", "A.S.D."]) and squadra_nome == "SQUADRA RILEVATA":
-                squadra_nome = re.sub(r'[^a-zA-Z\s]', '', riga_clean).upper().strip()
-                continue
-                
-            testo_formattato = formatta_riga_giocatore_reale(riga_clean)
-            if testo_formattato and len(testo_formattato.split()[0]) > 1:
-                if testo_formattato not in giocatori:
-                    giocatori.append(testo_formattato)
-    except:
-        pass
+        col_nomi_left = None
+        col_nomi_right = None
+        col_nascita_left = None
+        col_nascita_right = None
         
-    giocatori = [g for g in giocatori if g.strip()]
-    while len(giocatori) < 20:
-        giocatori.append("")
-    return giocatori[:20], all_nome, squadra_nome
+        n_elementi = len(dati_ocr['text'])
+        
+        # FASE 1: Individuazione geometrica delle colonne di interesse
+        for i in range(n_elementi):
+            testo = str(dati_ocr['text'][i]).upper().strip()
+            
+            # Cerca l'intestazione della colonna Nomi
+            if "COGNOME" in testo or "NOME" in testo:
+                col_nomi_left = dati_ocr['left'][i] - 20  # Margine di tolleranza a sinistra
+                col_nomi_right = col_nomi_left + 400     # Estensione stimata della colonna nomi
+                
+            # Cerca l'intestazione della colonna Data di Nascita
+            if "NASCITA" in testo or "DATA" in testo or "NASC" in testo:
+                col_nascita_left = dati_ocr['left'][i] - 15
+                col_nascita_right = col_nascita_left + 150
+                
+            # Cerca il nome della squadra (es. ASD, FC) nelle righe alte
+            if any(x in testo for x in ["ASD", "F.C.", "AC", "CLUB"]) and dati_ocr['top'][i] < 300:
+                squadra_nome = str(dati_ocr['text'][i]).upper()
+        
+        # Se le colonne non vengono rilevate via testo, applichiamo dei fallback proporzionali standard
+        img_width, _ = img.size
+        if not col_nomi_left:
+            col_nomi_left, col_nomi_right = int(img_width * 0.15), int(img_width * 0.55)
+        if not col_nascita_left:
+            col_nascita_left, col_nascita_right = int(img_width * 0.60), int(img_width * 0.85)
+            
+        # FASE 2: Raggruppamento dei frammenti di testo per Righe Orizzontali (Y)
+        righe_mappate = {}
+        
+        for i in range(n_elementi):
+            testo_parola = str(dati_ocr['text'][i]).strip()
+            confidenza = int(dati_ocr['conf'][i])
+            
+            if confidenza < 40 or len(testo_parola) < 2:
+                continue
+                
+            x_pos = dati_ocr['left'][i]
+            y_pos = dati_ocr['top'][i]
+            
+            # Troviamo o creiamo una riga orizzontale con tolleranza di 12 pixel per le oscillazioni della penna
+            riga_y = None
+            for y_chiave in righe_mappate.keys():
+                if abs(y_chiave - y_pos) <= 12:
+                    riga_y = y_chiave
+                    break
+            
+            if riga_y is None:
+                riga_y = y_pos
+                righe_mappate[riga_y] = {"nomi": [], "nascita": []}
+                
+            # Distribuiamo la parola nella colonna corretta in base alla coordinata X
+            if col_nomi_left <= x_pos <= col_nomi_right:
+                if not any(x in testo_parola.upper() for x in ["COGNOME", "NOME", "ALLENATORE", "ALL"]):
+                    righe_mappate[riga_y]["nomi"].append(testo_parola)
+            elif col_nascita_left <= x_pos <= col_nascita_right:
+                if not any(x in testo_parola.upper() for x in ["NASCITA", "DATA", "ANNO"]):
+                    righe_mappate[riga_y]["nascita"].append(testo_parola)
+                    
+            # Rilevamento isolato dell'allenatore
+            if "ALLENATORE" in testo_parola.upper() or "ALL." in testo_parola.upper():
+                all_nome = "RILEVATO" # Segnaposto da sovrascrivere con i dati successivi sulla stessa Y
+        
+        # FASE 3: Ricostruzione e Formattazione Finale
+        for y in sorted(righe_mappate.keys()):
+            blocco_nomi = " ".join(righe_mappate[y]["nomi"]).strip()
+            blocco_nascita = "".join(righe_mappate[y]["nascita"]).strip()
+            
+            if not blocco_nomi:
+                continue
+                
+            # Estrazione pulita dell'anno di nascita (2 o 4 cifre finali della data)
+            match_anno = re.search(r'\b(\d{2,4})\b', blocco_nascita)
+            anno_formattato = f"'{match_anno.group(1)[-2:]}" if match_anno else ""
+            
+            # Formattazione estetica Nome e Cognome
+            parole_anagrafica = blocco_nomi.split()
+            if len(parole_anagrafica) >= 2:
+                cognome = parole_anagrafica[0].upper()
+                nome = " ".join(parole_anagrafica[1:]).title()
+                giocatore_completo = f"{cognome} {nome}"
+                if anno_formattato:
+                    giocatore_completo += f" ({anno_formattato})"
+                
+                giocatori_estratti.append(giocatore_completo)
+                
+    except Exception as e:
+        st.error(f"Errore durante l'estrazione geometrica: {str(e)}")
+        
+    # Rimozione duplicati strutturali e normalizzazione a 20 righe per Streamlit
+    giocatori_estratti = [g for g in giocatori_estratti if g.strip()]
+    while len(giocatori_estratti) < 20:
+        giocatori_estratti.append("")
+        
+    return giocatori_estratti[:20], all_nome, squadra_nome
+
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI DALLE FOTO", use_container_width=True):
