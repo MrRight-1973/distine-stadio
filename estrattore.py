@@ -10,7 +10,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 def encode_image(uploaded_file):
-    """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
@@ -20,8 +19,6 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto ottimizzata a OpenAI ed estrae i dati strutturati garantendo il formato"""
-    # Inizializza il client usando esplicitamente la chiave passata dall'interfaccia principale
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
@@ -57,8 +54,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    # Estrazione sicura della stringa JSON con l'indice corretto
-    risultato_grezzo = response.choices[0].message.content
+    risultato_grezzo = response.choices.message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
@@ -70,7 +66,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     return json.loads(risultato_grezzo)
 
 def genera_pdf(casa, ospite):
-    """Genera il file PDF formattato in un unico foglio A4 con colonne affiancate ed evidenziazione Under"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
