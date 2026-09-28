@@ -39,7 +39,7 @@ if file_casa and file_ospite:
 if "dati_iniziali_estratti" in st.session_state:
     st.markdown("---")
     st.header("✏️ Fase 2: Controllo e Aggiunta Manuale")
-    st.info("💡 SE MANCA UN GIOCATORE (es. BOSCAIN): Clicca sull'icona '+' in fondo alla tabella per aggiungere una nuova riga e inserire i dati a mano!")
+    st.info("💡 SE MANCA UN GIOCATORE: Clicca sull'icona '+' in fondo alla tabella per aggiungere una nuova riga e inserire i dati a mano!")
     
     casa_data = st.session_state["dati_iniziali_estratti"]["casa"]
     ospite_data = st.session_state["dati_iniziali_estratti"]["ospite"]
