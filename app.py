@@ -33,7 +33,7 @@ if file_casa and file_ospite:
                     st.session_state["dati_iniziali_estratti"] = {"casa": casa_raw, "ospite": ospite_raw}
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Errore durante l'analis visiva: {e}")
+                    st.error(f"Errore durante l'analisi visiva: {e}")
 
 # --- AREA DI CORREZIONE E AGGIUNTA MANUALE ---
 if "dati_iniziali_estratti" in st.session_state:
@@ -68,7 +68,6 @@ if "dati_iniziali_estratti" in st.session_state:
         if df_casa.empty:
             df_casa = pd.DataFrame(columns=["numero", "cognome_nome", "anno_nascita"])
         
-        # Abilitiamo num_rows="dynamic" per permettere all'utente di aggiungere/rimuovere righe a mano
         editor_casa = st.data_editor(df_casa, num_rows="dynamic", key="edit_grid_casa", use_container_width=True)
         
     with c_sq2:
