@@ -214,10 +214,22 @@ if "dati_mappati" in st.session_state:
                 stringa_mappata = base64.urlsafe_b64encode(compresso).decode('utf-8')
                 
                 # 2. Rileva dinamicamente l'indirizzo web dell'app per formare il link spettatori
-                # Se l'app è su Streamlit Cloud userà l'URL corretto automaticamente
-                url_base_app = "https://streamlit.app" # Sostituisci con l'URL finale se diverso
-                if st.get_option("server.port") == 8501: # Se in locale su PC
+                # RISOLUZIONE AUTOMATICA: Rileva l'URL esatto in base a dove sta girando l'applicazione
+                from streamlit import runtime
+                
+                # Prova a prendere l'URL reale di produzione o locale dalle intestazioni di Streamlit
+                try:
+                    from streamlit.web.server.server import Server
+                    # Se siamo su Streamlit Cloud o in locale, ricaviamo la base corretta
+                    ctx = runtime.get_instance()._session_mgr.list_active_sessions()[0].client_context
+                    url_pubblico_rilevato = ctx.headers.get("X-Forwarded-Proto", "http") + "://" + ctx.headers.get("Host", "localhost:8501")
+                    url_base_app = url_pubblico_rilevato
+                except:
+                    # Alternativa di ripiego standard
                     url_base_app = "http://localhost:8501"
+                    if st.get_option("server.port") != 8501:
+                        # Se sei online su Streamlit Cloud inserisci qui il tuo URL definitivo per sicurezza
+                        url_base_app = "https://streamlit.app" 
                     
                 url_pubblico = f"{url_base_app}?match={stringa_mappata}"
                 
