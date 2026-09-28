@@ -43,7 +43,7 @@ if file_casa and file_ospite:
                     pdf_data = genera_pdf(dati_casa, dati_ospite)
                     st.success("🎉 Distinte elaborate ed unite con successo!")
                     
-                    # Caricamento cloud con gestione errori integrata
+                    # Caricamento cloud temporaneo con gestione fallimenti integrata
                     pdf_url = None
                     try:
                         files = {'file': ('riepilogo_distinte.pdf', pdf_data, 'application/pdf')}
