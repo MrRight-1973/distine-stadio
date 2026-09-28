@@ -172,8 +172,9 @@ if "dati_mappati" in st.session_state:
                     id_partita = f"distinta_{info_gara_corrette['data'].replace('/', '_')}_{random.randint(1000, 9999)}".lower()
                     nome_file = f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf"
                     
-                    # CORREZIONE CRITICA: Aggiunto lo slash '/' tra filebin.net e {id_partita}
-                    upload_url = f"https://filebin.net{id_partita}/{nome_file}"
+                    # RISOLUZIONE DEFINITIVA: Stringa divisa con slash esplicito senza ambiguità di formattazione
+                    base_url = "https://filebin.net"
+                    upload_url = base_url + "/" + id_partita + "/" + nome_file
                     
                     # Inviamo i byte crudi del PDF tramite richiesta PUT
                     headers = {"Content-Type": "application/pdf"}
@@ -181,7 +182,7 @@ if "dati_mappati" in st.session_state:
                     
                     if response_upload.status_code == 200 or response_upload.status_code == 201:
                         # L'URL di download diretto per gli spettatori sarà questo:
-                        url_pubblico = f"https://filebin.net{id_partita}/{nome_file}"
+                        url_pubblico = base_url + "/" + id_partita + "/" + nome_file
                         caricato_con_successo = True
                     else:
                         st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Tento fallback rapido...")
