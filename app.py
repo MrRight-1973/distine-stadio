@@ -13,7 +13,7 @@ import qrcode
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Gestione fino a 5 Sponsor in trasparenza, correzione e stampa A4</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Lettura OCR reale al 100%, correzione anagrafiche e impaginazione A4</p>", unsafe_allow_html=True)
 
 # Uso dello Session State di Streamlit per memorizzare le modifiche della segreteria
 if "dati_pronti" not in st.session_state:
@@ -27,9 +27,9 @@ if "casa_all_input" not in st.session_state:
 if "ospite_all_input" not in st.session_state:
     st.session_state.ospite_all_input = ""
 if "squadra_casa_nome" not in st.session_state:
-    st.session_state.squadra_casa_nome = "AZZURRA DUECARRARE"
+    st.session_state.squadra_casa_nome = "SQUADRA CASA"
 if "squadra_ospite_nome" not in st.session_state:
-    st.session_state.squadra_ospite_nome = "A.S.D. PETTORAZZA SAN MARTINO"
+    st.session_state.squadra_ospite_nome = "SQUADRA OSPITE"
 
 # 1. SIDEBAR: CARICAMENTO FINO A 5 SPONSOR E CONFIGURAZIONE
 st.sidebar.header("⚙️ Configurazione Partita")
@@ -43,7 +43,7 @@ sponsor_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 if len(sponsor_files) > 5:
-    st.sidebar.error("Puoi caricare un maximum di 5 sponsor! Verranno considerati solo i primi 5.")
+    st.sidebar.error("Puoi caricare un massimo di 5 sponsor! Verranno considerati solo i primi 5.")
     sponsor_files = sponsor_files[:5]
 
 st.sidebar.header("⚖️ Terna Arbitrale")
@@ -59,50 +59,92 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-def algoritmo_estrazione_dinamico(file_name, rileva_casa=True):
-    if ("casa" in file_name.lower()) or ("azzurra" in file_name.lower()) or ("duecarrare" in file_name.lower()) or ("5w4bdc" in file_name.lower()):
-        esito_casa = True
-    else:
-        esito_casa = False
+def formatta_stringa_giocatore(testo_grezzo):
+    """Formatta graficamente la stringa letta dall'OCR in COGNOME Nome ('Anno)"""
+    # Estrae l'anno di nascita se presente (cerca 2 o 4 cifre consecutive)
+    match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
+    anno_estratto = f"'{match_anno.group(2)}" if match_anno else ""
+    
+    # Isola capitani e vice
+    ruolo = ""
+    if "(C)" in testo_grezzo.upper(): ruolo = " (C)"
+    elif "(VC)" in testo_grezzo.upper() or "(V)" in testo_grezzo.upper(): ruolo = " (VC)"
+    
+    # Pulisce lasciando solo il testo alfabetico
+    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_grezzo).strip()
+    testo_puro = testo_puro.replace("C", "").replace("VC", "").replace("V", "").strip()
+    
+    parole = testo_puro.split()
+    if len(parole) >= 2:
+        cognome = parole[0].upper()
+        nome = " ".join(parole[1:]).title()
+        risultato = f"{cognome} {nome}{ruolo}"
+        if anno_estratto: risultato += f" ({anno_estratto})"
+        return resultado
+    elif len(parole) == 1:
+        risultato = parole[0].upper() + ruolo
+        if anno_estratto: risultato += f" ({anno_estratto})"
+        return risultato
+    return ""
 
-    if (rileva_casa and esito_casa) or (not rileva_casa and not esito_casa):
-        all_nome = "PETRACIN ALESSANDRO"
-        giocatori = [
-            "VENTURINI Leonardo ('05)", "ZONZIN Sebastiano ('02)", "PAVAN Marco (VC) ('03)",
-            "MINOGLIO Tommaso ('04)", "PACCAGNELLA Francesco ('01)", "ZOMPA Alessio ('00)",
-            "CACCO Filippo ('99)", "AGGIO Kevin (C) ('03)", "PIVA Anderson ('02)",
-            "CORASANITI Pietro ('04)", "CORREZZOLA Alberto ('98)", "BELLAMIO Andrea ('96)",
-            "BERGAMASCO Andrea ('01)", "CHECCHINATO Riccardo ('05)", "BOSCAIN Tommaso ('04)",
-            "BOSCARO Tommaso ('03)", "PACCAGNELLA Antonio ('05)", "NALIN Nicholas ('03)",
-            "ALBERTIN Francesco ('02)", "TACCHINATO Pietro ('05)"
-        ]
-        squadra_nome = "AZZURRA DUECARRARE"
-    else:
-        all_nome = "SADOCCO MARCO"
-        giocatori = [
-            "CHERUBIN Luca ('01)", "ROSSI Andrea ('02)", "NESE Manuel ('04)", "BERGO Alex ('00)",
-            "RANZATO Lorenzo ('03)", "CAMISOTTI Nicolas ('99)", "MAZZETTO Matteo (C) ('97)",
-            "MORANDI Enrico ('01)", "MARINELLI Leonardo ('05)", "BALLARIN Alex (V) ('03)",
-            "SADELLAH Salah Dine ('04)", "MATTIOLI Roberto ('02)", "ZULIAN Daniele ('01)",
-            "BRUNELLO Devis ('98)", "MARCHI Riccardo ('05)", "DOMENEGHETTI Marco ('04)",
-            "MARITAN Francesco ('03)", "BABETTO Diego ('05)", "REDI Alberto ('02)",
-            "GRADARA Carlo Alberto ('01)"
-        ]
-        squadra_nome = "A.S.D. PETTORAZZA SAN MARTINO"
+@st.cache_resource
+def carica_modello_ocr():
+    """Inizializza EasyOCR in modo sicuro memorizzandolo nella cache del server"""
+    import easyocr
+    return easyocr.Reader(['it'], gpu=False)
+
+def esegui_ocr_reale(uploaded_file):
+    """Estrae i dati reali dall'immagine senza alcun testo preimpostato"""
+    giocatori = []
+    all_nome = "Non rilevato"
+    squadra_rilevata = "SQUADRA CARICATA"
+    
+    try:
+        reader = carica_modello_ocr()
+        image_bytes = uploaded_file.read()
+        risultati = reader.readtext(image_bytes, detail=0)
         
-    return giocatori, all_nome, squadra_nome
+        for riga in risultati:
+            riga_clean = riga.strip()
+            if len(riga_clean) < 4 or "SOCIET" in riga_clean.upper() or "FEDERAZIONE" in riga_clean.upper():
+                continue
+            
+            # Cerca l'allenatore
+            if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
+                all_nome = re.sub(r'[^a-zA-Z\s]', '', riga_clean).replace("ALLENATORE", "").replace("All", "").strip().upper()
+                continue
+                
+            # Prova a estrarre il nome della squadra in cima al foglio
+            if ("ASD" in riga_clean.upper() or "AZZURRA" in riga_clean.upper() or "PETTORAZZA" in riga_clean.upper()) and len(giocatori) < 2:
+                squadra_rilevata = riga_clean.upper()
+                continue
+            
+            testo_formattato = formatta_stringa_giocatore(riga_clean)
+            if testo_formattato and "DIRIGENTE" not in testo_formattato.upper() and "MEDICO" not in testo_formattato.upper():
+                giocatori.append(testo_formattato)
+    except Exception as e:
+        st.error(f"Errore tecnico OCR: {e}")
+        
+    # Se la foto è parziale, lascia campi vuoti per la segreteria
+    while len(giocatori) < 20:
+        giocatori.append("")
+    return giocatori[:20], all_nome, squadra_rilevata
 
 if foto_casa and foto_ospite:
     if st.button("🔍 1. ESTRAI E RIVEDERE I DATI", use_container_width=True):
-        g_casa, a_casa, name_casa = algoritmo_estrazione_dinamico(foto_casa.name, rileva_casa=True)
-        g_ospite, a_ospite, name_ospite = algoritmo_estrazione_dinamico(foto_ospite.name, rileva_casa=False)
-        st.session_state.casa_giocatori_input = g_casa
-        st.session_state.casa_all_input = a_casa
-        st.session_state.squadra_casa_nome = name_casa
-        st.session_state.ospite_giocatori_input = g_ospite
-        st.session_state.ospite_all_input = a_ospite
-        st.session_state.squadra_ospite_nome = name_ospite
-        st.session_state.dati_pronti = True
+        with st.spinner("L'Intelligenza Artificiale sta scansionando le due immagini in tempo reale..."):
+            # ESEGUI OCR REALE E SEPARATO SUI DUE FILE CARICATI
+            g_casa, a_casa, name_casa = esegui_ocr_reale(foto_casa)
+            g_ospite, a_ospite, name_ospite = esegui_ocr_reale(foto_ospite)
+            
+            st.session_state.casa_giocatori_input = g_casa
+            st.session_state.casa_all_input = a_casa
+            st.session_state.squadra_casa_nome = name_casa
+            
+            st.session_state.ospite_giocatori_input = g_ospite
+            st.session_state.ospite_all_input = a_ospite
+            st.session_state.squadra_ospite_nome = name_ospite
+            st.session_state.dati_pronti = True
 
 if st.session_state.dati_pronti:
     st.markdown("---")
@@ -169,14 +211,13 @@ if st.session_state.dati_pronti:
             box_ospite.append(Spacer(1, 4))
             box_ospite.append(Paragraph(f"<b>All.</b> {o_all_edit}", staff_style))
             
-            # CORRETTO: Aggiunta la larghezza fissa [260, 260] per le due colonne
             grid = Table([[box_casa, box_ospite]], colWidths=[260, 260])
             grid.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('RIGHTPADDING', (0,0), (0,0), 15), ('LEFTPADDING', (1,0), (1,0), 15)]))
             story.append(grid)
             
             story.append(Spacer(1, 8))
             
-            # --- ELABORAZIONE E RENDERING DEI 5 SPONSOR IN LINEA ---
+            # Rendering dei 5 sponsor caricati reali
             if sponsor_files:
                 blocchi_sponsor = []
                 num_sponsor = min(len(sponsor_files), 5)
@@ -188,7 +229,6 @@ if st.session_state.dati_pronti:
                         alpha = img.split()
                         alpha = ImageEnhance.Brightness(alpha).enhance(0.25)
                         img.putalpha(alpha)
-                        
                         temp_path = f"temp_sponsor_{idx}.png"
                         img.save(temp_path)
                         blocchi_sponsor.append(RLImage(temp_path, width=width_singolo, height=35, kind='proportional'))
@@ -197,9 +237,7 @@ if st.session_state.dati_pronti:
                 if blocchi_sponsor:
                     tabella_sponsor = Table([blocchi_sponsor], colWidths=[width_singolo+10]*len(blocchi_sponsor))
                     tabella_sponsor.setStyle(TableStyle([
-                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                        ('BOTTOMPADDING', (0,0), (-1,-1), 5)
+                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('BOTTOMPADDING', (0,0), (-1,-1), 5)
                     ]))
                     story.append(tabella_sponsor)
             
@@ -222,5 +260,5 @@ if st.session_state.dati_pronti:
             pdf_bytes = pdf_buffer.getvalue()
             pdf_buffer.close()
             
-            st.success("✅ Distinta dinamica in singola pagina A4 ed esportata!")
+            st.success("✅ Distinta dinamica generata!")
             st.download_button(label="📥 Scarica PDF Distinta Verificata", data=pdf_bytes, file_name=f"Distinta_Stadio_{data_partita.replace('/', '-')}.pdf", mime="application/pdf", use_container_width=True)
