@@ -3,13 +3,49 @@ import io
 import qrcode
 import requests
 import base64
-import json  # <-- AGGIUNTO QUI PER RISOLVERE L'ERRORE
-import zlib  # <-- AGGIUNTO PER LA COMPRESSIONE DEL QR CODE
+import json
+import zlib
 import pandas as pd
 from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 
-
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
+
+# --- INTERCETTAZIONE LINK SPETTATORI DA QR CODE (MOBILE FRIENDLY) ---
+query_params = st.query_params
+if "match" in query_params:
+    try:
+        # 1. Recupera e decodifica la stringa compressa Base64 dall'URL
+        stringa_compressa = query_params["match"]
+        compresso = base64.urlsafe_b64decode(stringa_compressa.encode('utf-8'))
+        json_string = zlib.decompress(compresso).decode('utf-8')
+        dati_match = json.loads(json_string)
+        
+        # 2. Mostra un'interfaccia mobile elegante e pulita per i tifosi allo stadio
+        st.title("⚽ Distinta Digitale Ufficiale")
+        st.subheader(f"🏆 {dati_match.get('c', 'CAMPIONATO LND')}")
+        st.markdown(f"📅 *Gara del:* **{dati_match.get('d', 'N.D.')}**")
+        
+        st.markdown("---")
+        
+        # Layout a due colonne ottimizzato per smartphone
+        col_casa, col_ospite = st.columns(2)
+        with col_casa:
+            st.markdown(f"🏠 **CASA:** {dati_match.get('s1', 'SQUADRA LOCALE')}")
+            # Se vuoi estendere e mostrare l'intera lista ti basterà salvarla nel dizionario al passaggio 1
+            st.info("Formazione ufficiale disponibile a breve sui tabelloni.")
+            
+        with col_ospite:
+            st.markdown(f"🚀 **OSPITE:** {dati_match.get('s2', 'SQUADRA OSPITE')}")
+            st.info("Formazione ufficiale disponibile a breve sui tabelloni.")
+            
+        st.markdown("---")
+        st.caption("Servizio digitale offerto dal Centro Gestione Distinte Gara.")
+        
+        # Blocca l'esecuzione qui in modo che lo spettatore non veda il caricamento dei file della Fase 1
+        st.stop()
+        
+    except Exception as e_decode:
+        st.error(f"Impossibile decodificare i dati del match: {e_decode}")
 
 st.title("⚽ Centro Gestione Distinte Gara Gestionale")
 st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sulle liste.")
