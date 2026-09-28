@@ -13,7 +13,6 @@ def pulisci_testo(testo):
     """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
     if not testo:
         return ""
-    # Sostituisce i trattini bassi con uno spazio e rimuove gli spazi doppi
     testo_pulito = testo.replace("_", " ")
     testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
     return testo_pulito.strip().upper()
@@ -80,7 +79,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         
     dati = json.loads(risultato_grezzo)
     
-    # Applicazione della pulizia testo e MAIUSCOLO su tutti i dati estratti dall'AI
     dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
     dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
     dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
@@ -104,10 +102,8 @@ def genera_pdf(casa, ospite, info_gara):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     
-    # 1. Intestazione del Foglio A4
     story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style))
     
-    # Tabella delle informazioni della partita (Data, Campionato e Terna Arbitrale)
     data_partita = info_gara["data"] if info_gara["data"] else casa.get("data", "NON INDICATA")
     camp_partita = info_gara["campionato"] if info_gara["campionato"] else casa.get("campionato", "NON INDICATO")
     
@@ -116,7 +112,7 @@ def genera_pdf(casa, ospite, info_gara):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=)
+    t_info = Table(tabella_info_dati, colWidths=[275, 275])
     t_info.setStyle(TableStyle([
         ('LINEBELOW', (0,-1), (-1,-1), 1, colors.HexColor("#CBD5E0")),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -125,7 +121,6 @@ def genera_pdf(casa, ospite, info_gara):
     story.append(t_info)
     story.append(Spacer(1, 6))
     
-    # 2. Generazione delle liste delle due squadre
     def genera_tabella_squadra(dati, etichetta):
         elementi_squadra = []
         elementi_squadra.append(Paragraph(f"<b>{etichetta}</b>", team_title_style))
@@ -147,7 +142,7 @@ def genera_pdf(casa, ospite, info_gara):
             testo_anno = Paragraph(str(g['anno_nascita']), normal_style)
             tabella_dati.append([testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=)
+        t = Table(tabella_dati, colWidths=[210, 45])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -156,7 +151,7 @@ def genera_pdf(casa, ospite, info_gara):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=)
+    macro_tabella = Table(macro_tabella_dati, colWidths=[255, 40, 255])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
