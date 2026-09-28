@@ -28,27 +28,22 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI ed estrae rigorosamente TUTTI i giocatori riga per riga"""
+    """Invia la foto a OpenAI ed estrae i dati basandosi sulla sequenza numerica delle maglie"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Il tuo compito principale è scansionare la tabella dei calciatori riga per riga, "
-        "seguendo rigorosamente la numerazione progressiva delle maglie (da 1 a 20 o più). Assicurati di NON SALTARE NESSUNA RIGA. "
-        "Estrai obbligatoriamente:\n"
-        "1. Il NOME DELLA SQUADRA.\n"
-        "2. Il NOME E COGNOME DELL'ALLENATORE.\n"
-        "3. La DATA DELLA PARTITA (in alto nel foglio).\n"
-        "4. Il CAMPIONATO o CATEGORIA.\n"
-        "5. La lista COMPLETA di tutti i GIOCATORI con 'cognome_nome' e 'anno_nascita' (senza omettere nessuno).\n\n"
-        "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
+        "Sei un assistente esperto di calcio LND. Il tuo compito principale è scansionare la griglia dei calciatori. "
+        "Devi leggere la tabella seguendo obbligatoriamente l'ordine dei NUMERI DI MAGLIA da 1 a 20. Non saltare nessuna riga, "
+        "analizza con estrema attenzione i numeri dal 10 al 15, incluso il numero 13 (BOSCAIN TOMMASO o simili). "
+        "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura strutturata per numero di maglia:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
         "  \"allenatore\": \"Cognome Nome\",\n"
         "  \"data\": \"DD/MM/YYYY\",\n"
         "  \"campionato\": \"Nome Campionato\",\n"
         "  \"giocatori\": [\n"
-        "    {\"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": 2005}\n"
+        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": 2005}\n"
         "  ]\n"
         "}"
     )
@@ -61,7 +56,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Analizza attentamente la tabella ed estrai l'elenco completo riga per riga senza saltare nessun numero per la squadra {ruolo_squadra} in formato json."},
+                    {"type": "text", "text": f"Esegui un'estrazione json accurata riga per riga di tutti i 20 giocatori della squadra {ruolo_squadra}, prestando massima attenzione a non saltare il numero 13."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -105,7 +100,7 @@ def genera_pdf(casa, ospite, info_gara):
     
     story.append(Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style))
     
-    data_partita = info_gara["data"] if info_gara["data"] else casa.get("data", "NON INDICATA")
+    data_partita = info_gara["data"] if info_gara["data"] else casa.get("data", "NON INDICAＴA")
     camp_partita = info_gara["campionato"] if info_gara["campionato"] else casa.get("campionato", "NON INDICATO")
     
     tabella_info_dati = [
@@ -129,7 +124,7 @@ def genera_pdf(casa, ospite, info_gara):
         elementi_squadra.append(Paragraph(f"<b>ALLENATORE:</b> {dati.get('allenatore', 'NON INDICATO')}", normal_style))
         elementi_squadra.append(Spacer(1, 3))
         
-        tabella_dati = [[Paragraph("<b>GIOCATORE</b>", bold_style), Paragraph("<b>ANNO</b>", bold_style)]]
+        tabella_dati = [[Paragraph("<b>N°</b>", bold_style), Paragraph("<b>GIOCATORE</b>", bold_style), Paragraph("<b>ANNO</b>", bold_style)]]
         stili_celle = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 1.8),
@@ -139,11 +134,13 @@ def genera_pdf(casa, ospite, info_gara):
         ]
         
         for indice, g in enumerate(dati.get('giocatori', []), start=1):
+            num_maglia = str(g.get('numero', indice))
+            testo_num = Paragraph(num_maglia, normal_style)
             testo_nome = Paragraph(g['cognome_nome'], normal_style)
             testo_anno = Paragraph(str(g['anno_nascita']), normal_style)
-            tabella_dati.append([testo_nome, testo_anno])
+            tabella_dati.append([testo_num, testo_nome, testo_anno])
             
-        t = Table(tabella_dati, colWidths=[180, 40])
+        t = Table(tabella_dati, colWidths=[25, 195, 35])
         t.setStyle(TableStyle(stili_celle))
         elementi_squadra.append(t)
         return elementi_squadra
@@ -152,7 +149,7 @@ def genera_pdf(casa, ospite, info_gara):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[265, 20, 265])
+    macro_tabella = Table(macro_tabella_dati, colWidths=[255, 30, 255])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
