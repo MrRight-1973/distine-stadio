@@ -8,7 +8,6 @@ import io
 import re
 from PIL import Image
 import qrcode
-import pytesseract
 
 # Configurazione grafica della pagina web
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
@@ -51,62 +50,54 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
+def formatta_cognome_nome(testo_grezzo):
+    match_anno = re.search(r'\b(19|20)?(\d{2})\b', testo_grezzo)
+    anno_estratto = f"'{match_anno.group(2)}" if match_anno else "'00"
+    
+    # Isola i tag Capitano/Vice
+    ruolo = ""
+    if "(C)" in testo_grezzo.upper(): ruolo = " (C)"
+    elif "(VC)" in testo_grezzo.upper() or "(V)" in testo_grezzo.upper(): ruolo = " (VC)"
+    
+    # Rimuove numeri, date e simboli per estrarre solo lettere
+    testo_puro = re.sub(r'[^a-zA-Z\s]', '', testo_grezzo).strip()
+    testo_puro = testo_puro.replace("C", "").replace("VC", "").replace("V", "").strip()
+    
+    parole = testo_puro.split()
+    if len(parole) >= 2:
+        cognome = parole[0].upper()
+        nome = " ".join(parole[1:]).title()
+        return f"{cognome} {nome}{ruolo} ({anno_estratto})"
+    elif len(parole) == 1:
+        return f"{parole[0].upper()}{ruolo} ({anno_estratto})"
+    return ""
+
 def analizza_e_formatta_ocr(uploaded_file):
-    """Esegue l'OCR reale sull'immagine e formatta COGNOME Nome ('Anno)"""
     giocatori_estratti = []
     allenatore = "Non rilevato"
-    nome_squadra = "SQUADRA"
-    
     try:
-        img = Image.open(uploaded_file)
-        # Esegue la lettura del testo in lingua italiana
-        testo = pytesseract.image_to_string(img, lang='ita')
-        righe = testo.split('\n')
+        import easyocr
+        reader = easyocr.Reader(['it'], gpu=False) # Forza l'uso della CPU dei server Streamlit
+        image_bytes = uploaded_file.read()
+        risultati = reader.readtext(image_bytes, detail=0)
         
-        for riga in righe:
+        for riga in risultati:
             riga_clean = riga.strip()
-            if not riga_clean or len(riga_clean) < 4:
+            if len(riga_clean) < 4 or "SOCIET" in riga_clean.upper():
                 continue
-            
-            # Cerca il nome della società (es. righe iniziali in maiuscolo)
-            if "SOCIET" in riga_clean.upper() or "SQUADRA" in riga_clean.upper():
-                continue
-                
-            # Identifica l'allenatore
             if "ALLENATORE" in riga_clean.upper() or "ALL." in riga_clean.upper():
-                allenatore = riga_clean.replace("ALLENATORE:", "").replace("All.", "").strip().title()
+                allenatore = re.sub(r'[^a-zA-Z\s]', '', riga_clean).replace("ALLENATORE", "").replace("All", "").strip().title()
                 continue
             
-            # Cerca date di nascita nel formato GG/MM/AAAA o GG/MM/AA
-            match_data = re.search(r'\b(\d{2})/(\d{2})/(\d{2,4})\b', riga_clean)
-            anno_breve = "'00"
-            if match_data:
-                anno_completo = match_data.group(3)
-                anno_breve = f"'{anno_completo[-2:]}"
-                # Rimuove la data dal testo per isolare il nome
-                riga_clean = riga_clean.replace(match_data.group(0), "").strip()
-            
-            # Pulisce il testo da numeri isolati (es. vecchi numeri di maglia letti male)
-            riga_clean = re.sub(r'^\d+[\s\.\-]*', '', riga_clean).strip()
-            
-            # Isola i tag Capitano/Vice
-            ruolo = ""
-            if "(C)" in riga_clean.upper(): ruolo = " (C)"
-            elif "(VC)" in riga_clean.upper() or "(V)" in riga_clean.upper(): ruolo = " (VC)"
-            riga_clean = riga_clean.replace("(C)", "").replace("(VC)", "").replace("(V)", "").strip()
-            
-            # Formatta COGNOME Nome
-            parole = riga_clean.split()
-            if len(parole) >= 2:
-                cognome = parole[0].upper()
-                nome = " ".join(parole[1:]).title()
-                # Evita di inserire righe di rumore o scritte di servizio del modulo FIGC
-                if "DIRIGENTE" not in cognome and "TESSERA" not in cognome and "MEDICO" not in cognome:
-                    giocatori_estratti.append(f"{cognome} {nome}{ruolo} ({anno_breve})")
-                    
+            testo_formattato = formatta_cognome_nome(riga_clean)
+            if testo_formattato and "DIRIGENTE" not in testo_formattato and "MEDICO" not in testo_formattato:
+                giocatori_estratti.append(testo_formattato)
     except Exception as e:
-        st.error(f"Errore durante l'elaborazione OCR: {e}")
+        st.error(f"Errore durante l'elaborazione: {e}")
         
+    # Riempie fino a 20 righe se l'immagine era sfuocata o parziale
+    while len(giocatori_estratti) < 20:
+        giocatori_estratti.append("")
     return giocatori_estratti[:20], allenatore
 
 if foto_casa and foto_ospite:
@@ -114,11 +105,6 @@ if foto_casa and foto_ospite:
         with st.spinner("L'Intelligenza Artificiale sta leggendo i file delle distinte..."):
             g_casa, a_casa = analizza_e_formatta_ocr(foto_casa)
             g_ospite, a_ospite = analizza_e_formatta_ocr(foto_ospite)
-            
-            # Se l'OCR non rileva abbastanza righe per via della qualità, usa strutture vuote modificabili
-            if not g_casa: g_casa = ["" for _ in range(20)]
-            if not g_ospite: g_ospite = ["" for _ in range(20)]
-            
             st.session_state.casa_giocatori_input = g_casa
             st.session_state.casa_all_input = a_casa
             st.session_state.ospite_giocatori_input = g_ospite
@@ -127,7 +113,7 @@ if foto_casa and foto_ospite:
 
 if st.session_state.dati_pronti:
     st.markdown("---")
-    st.warning("📝 **Pannello di Controllo Segreteria:** Inserisci i nomi corretti delle società e modifica i giocatori se noti imperfezioni, poi genera il PDF.")
+    st.warning("📝 **Pannello di Controllo:** Modifica o correggi i nomi e gli anni direttamente qui sotto, poi genera il PDF.")
     edit_col1, edit_col2 = st.columns(2)
     lista_casa_corretta = []
     lista_ospite_corretta = []
