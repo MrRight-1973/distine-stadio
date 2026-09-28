@@ -192,3 +192,4 @@ if "pdf_interattivo_pronto" in st.session_state:
             mime="application/pdf",
             type="primary",
             use_container_width=True
+        )
