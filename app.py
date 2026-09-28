@@ -163,25 +163,33 @@ if "dati_mappati" in st.session_state:
                 # 1. Genera una prima bozza del PDF (senza QR code momentaneamente)
                 pdf_bozza = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 2. Carica il PDF online tramite tmpfiles.org (valido per tutti per 24 ore)
-                url_pubblico = "https://www.google.com" # URL di ripiego in caso di crash totale del web
+                # 2. Carica il PDF online tramite server specifici per API (0x0.st o ix.io)
+                url_pubblico = "https://google.com" # Fallback globale
                 caricato_con_successo = False
                 
                 try:
+                    # Prepariamo il file in formato multipart
                     files = {'file': (f"distinta_{info_gara_corrette['data'].replace('/', '_')}.pdf", pdf_bozza, 'application/pdf')}
-                    response_upload = requests.post("https://tmpfiles.org", files=files, timeout=10)
                     
-                    if response_upload.status_code == 200 or response_upload.status_code == 201:
-                        data_json = response_upload.json()
-                        # tmpfiles restituisce un URL di visualizzazione, lo convertiamo in URL di download diretto
-                        url_visualizza = data_json.get("data", {}).get("url", "")
-                        if url_visualizza:
-                            url_pubblico = url_visualizza.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                            caricato_con_successo = True
+                    # TENTATIVO 1: Server ultra-stabile per sviluppatori (0x0.st)
+                    response_upload = requests.post("https://0x0.st", files=files, timeout=8)
+                    
+                    if response_upload.status_code == 200:
+                        url_pubblico = response_upload.text.strip()
+                        caricato_con_successo = True
                     else:
-                        st.warning(f"Il server di hosting ha risposto con codice {response_upload.status_code}. Il QR conterrà un link temporaneo.")
+                        # TENTATIVO 2 (RISERVA): Se il primo fallisce, proviamo ix.io
+                        pdf_bozza.seek(0) # Resetta il buffer per la rilettura
+                        payload_ix = {'f:1': pdf_bozza.getvalue()}
+                        response_ix = requests.post("http://ix.io", data=payload_ix, timeout=8)
+                        if response_ix.status_code == 200:
+                            url_pubblico = response_ix.text.strip()
+                            caricato_con_successo = True
+                        else:
+                            st.warning(f"Server primario (codice {response_upload.status_code}) e di riserva falliti.")
+                            
                 except Exception as e_upload:
-                    st.warning(f"Errore di rete durante il caricamento cloud: {e_upload}. Genero comunque il PDF.")
+                    st.warning(f"Errore di rete durante il caricamento cloud: {e_upload}. Genero comunque il PDF locale.")
 
                 # 3. Genera il QR Code contenente l'URL risultante
                 qr = qrcode.QRCode(version=1, box_size=10, border=1)
