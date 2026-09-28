@@ -70,7 +70,6 @@ if "dati_mappati" in st.session_state:
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
         edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
-        # Rimossa l'estensione 0-19 nascondendo l'indice nativo di Pandas
         st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
         
         riga_scelta_casa = st.selectbox("🎯 Seleziona N° riga su cui operare (Casa)", options=opzioni_righe, index=12)
@@ -98,7 +97,7 @@ if "dati_mappati" in st.session_state:
                 st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
                 st.rerun()
 
-    # --- GESTIONE SQUADRA OSPITE (SIMMETRICA ED ALLINEATA) ---
+    # --- GESTIONE SQUADRA OSPITE ---
     with c_sq2:
         st.subheader("🚀 SQUADRA OSPITE")
         edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
@@ -136,7 +135,6 @@ if "dati_mappati" in st.session_state:
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
-                # Ripristiniamo la struttura a dizionario leggendo l'indice N° corrente per il PDF
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
@@ -189,4 +187,8 @@ if "pdf_interattivo_pronto" in st.session_state:
     with c_dl2:
         st.download_button(
             label="📥 Scarica PDF su Smartphone",
-data=st.session_state["pdf_interattivo_pronto"],file_name="distinta_ufficiale_A4_mobile.pdf",mime="application/pdf",type="primary",use_container_width=True)
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4_mobile.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
