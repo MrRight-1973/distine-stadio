@@ -14,7 +14,7 @@ from reportlab.lib import colors
 st.set_page_config(page_title="Generatore Distinte Gara", page_icon="⚽", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #1A365D;'>⚽ GESTIONE DISTINTE STADIO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione spaziale delle colonne, pannello di verifica e stampa A4 con QR Code</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4A5568;'>Scansione spaziale basata su colonna numerica progressiva 1-20</p>", unsafe_allow_html=True)
 
 if "dati_pronti" not in st.session_state:
     st.session_state.dati_pronti = False
@@ -46,7 +46,7 @@ nome_arbitro = st.sidebar.text_input("Arbitro (Sig.)", "")
 assistente_1 = st.sidebar.text_input("Assistente 1", "")
 assistente_2 = st.sidebar.text_input("Assistente 2", "")
 
-# 3. INTERFACCIA DI CARICAMENTO FOTO UPLODER
+# 3. INTERFACCIA DI CARICAMENTO FOTO
 st.subheader("📸 Carica le FOTO delle distinte")
 col1, col2 = st.columns(2)
 
@@ -55,12 +55,12 @@ with col1:
 with col2:
     foto_ospite = st.file_uploader("Foto Distinta Squadra OSPITE", type=["png", "jpg", "jpeg"])
 
-# 4. MOTORE DI SCANSIONE ESTRATTORE GEOMETRICO
+# 4. MOTORE DI SCANSIONE AD ANCORAGGIO NUMERICO
 if foto_casa and foto_ospite:
-    st.markdown("### 🔍 1. Analisi e verifica geometrica delle colonne")
+    st.markdown("### 🔍 1. Analisi Geometrica e Allineamento sui Numeri di Riga")
     
     if st.button("🚀 AVVIA ESTRAZIONE PURA DALLE FOTO", use_container_width=True):
-        with st.spinner("Il motore spaziale sta tracciando le coordinate X/Y delle colonne..."):
+        with st.spinner("Allineamento sui numeri guida 1-20 ed estrazione anagrafica..."):
             
             def analizza_e_disegna_squadra(uploaded_file, etichetta_squadra):
                 img_originale = Image.open(uploaded_file)
@@ -71,41 +71,50 @@ if foto_casa and foto_ospite:
                 img_ocr = img_originale.convert('L')
                 img_ocr = ImageEnhance.Contrast(img_ocr).enhance(3.0)
                 
+                # Usiamo image_to_data per trovare la posizione di ogni singola parola/numero
                 dati_ocr = pytesseract.image_to_data(img_ocr, lang='ita', config='--psm 6', output_type=pytesseract.Output.DICT)
-                
-                col_nomi_left = None
-                col_nomi_right = None
-                col_nascita_left = None
-                col_nascita_right = None
                 n_elementi = len(dati_ocr['text'])
                 
+                # FASE 1: Individuazione della coordinata X media dei numeri progressivi da 1 a 20
+                x_numeri = []
+                mappa_y_numeri = {} # Associa il numero letto alla sua altezza Y
+                
                 for i in range(n_elementi):
-                    testo = str(dati_ocr['text'][i]).upper().strip()
-                    if "COGNOME" in testo or "NOME" in testo:
-                        if col_nomi_left is None:
-                            col_nomi_left = dati_ocr['left'][i] - 20
-                            col_nomi_right = col_nomi_left + 450
-                    if "NASCITA" in testo or "DATA" in testo or "NASC" in testo:
-                        if col_nascita_left is None:
-                            col_nascita_left = dati_ocr['left'][i] - 15
-                            col_nascita_right = col_nascita_left + 180
+                    testo = str(dati_ocr['text'][i]).strip()
+                    # Controlla se la parola è un numero puro compreso tra 1 e 20
+                    if testo.isdigit():
+                        num = int(testo)
+                        if 1 <= num <= 20:
+                            x_pos = dati_ocr['left'][i]
+                            y_pos = dati_ocr['top'][i]
+                            # Filtro per escludere numeri sparsi a destra (es. anni o tessere)
+                            if x_pos < larghezza_img * 0.30: 
+                                x_numeri.append(x_pos)
+                                mappa_y_numeri[y_pos] = num
 
-                if col_nomi_left is None:
-                    col_nomi_left, col_nomi_right = int(larghezza_img * 0.15), int(larghezza_img * 0.55)
-                if col_nascita_left is None:
-                    col_nascita_left, col_nascita_right = int(larghezza_img * 0.58), int(larghezza_img * 0.85)
-
-                # Disegno dei rettangoli di contenimento colonne
+                # Determina l'asse X della colonna numerica
+                if x_numeri:
+                    coordinata_x_ancora = int(sum(x_numeri) / len(x_numeri))
+                else:
+                    # Fallback geometrico se non legge i numeri impressi
+                    coordinata_x_ancora = int(larghezza_img * 0.08)
+                
+                # Calcola l'area della colonna BLU dei Nomi partendo subito a destra dell'ancora numerica
+                col_nomi_left = coordinata_x_ancora + 25   # Salta lo spazio del numero e del trattino
+                col_nomi_right = col_nomi_left + 450       # Larghezza utile per contenere COGNOME Nome
+                
+                # Disegna l'area BLU focalizzata sui nomi
                 draw.rectangle([col_nomi_left, 0, col_nomi_right, altezza_img], outline="blue", width=6)
-                draw.rectangle([col_nascita_left, 0, col_nascita_right, altezza_img], outline="green", width=6)
-
-                righe_mappate = {}
-                tolleranza_y = 12 
+                
+                # FASE 2: Raggruppamento dei frammenti di testo allineati sulle Y dei numeri guida
+                giocatori_per_indice = {i: [] for i in range(1, 21)}
+                tolleranza_y = 15 # Pixel di tolleranza per scritte leggermente ondulate
                 
                 for i in range(n_elementi):
                     testo_parola = str(dati_ocr['text'][i]).strip()
                     confidenza = int(dati_ocr['conf'][i])
-                    if confidenza < 35 or len(testo_parola) < 2:
+                    
+                    if confidenza < 35 or len(testo_parola) < 2 or testo_parola.isdigit():
                         continue
                         
                     x = dati_ocr['left'][i]
@@ -113,52 +122,35 @@ if foto_casa and foto_ospite:
                     w = dati_ocr['width'][i]
                     h = dati_ocr['height'][i]
                     
-                    if col_nomi_left <= x <= col_nomi_right or col_nascita_left <= x <= col_nascita_right:
+                    # Se la parola cade dentro l'area BLU dei Nomi
+                    if col_nomi_left <= x <= col_nomi_right:
                         draw.rectangle([x, y, x + w, y + h], outline="red", width=2)
                         
-                        riga_y = None
-                        for y_chiave in righe_mappate.keys():
-                            if abs(y_chiave - y) <= tolleranza_y:
-                                riga_y = y_chiave
+                        # Associa la parola alla riga del rispettivo numero da 1 a 20
+                        for y_num, num_riga in mappa_y_numeri.items():
+                            if abs(y_num - y) <= tolleranza_y:
+                                if not any(z in testo_parola.upper() for z in ["COGNOME", "NOME", "ALLENATORE", "DISTINTA"]):
+                                    giocatori_per_indice[num_riga].append(testo_parola)
                                 break
-                        if riga_y is None:
-                            riga_y = y
-                            righe_mappate[riga_y] = {"nomi": [], "nascita": []}
-                            
-                        if col_nomi_left <= x <= col_nomi_right:
-                            if not any(z in testo_parola.upper() for z in ["COGNOME", "NOME", "ALLENATORE"]):
-                                righe_mappate[riga_y]["nomi"].append(testo_parola)
-                        elif col_nascita_left <= x <= col_nascita_right:
-                            if not any(z in testo_parola.upper() for z in ["NASCITA", "DATA", "ANNO"]):
-                                righe_mappate[riga_y]["nascita"].append(testo_parola)
 
+                # FASE 3: Formattazione ordinata dei 20 slot richiesti
                 giocatori_finali = []
-                for y in sorted(righe_mappate.keys()):
-                    stringa_nome = " ".join(righe_mappate[y]["nomi"]).strip()
-                    stringa_nascita = "".join(righe_mappate[y]["nascita"]).strip()
-                    if not stringa_nome or len(re.sub(r'[^a-zA-Z]', '', stringa_nome)) < 3:
-                        continue
-                    
-                    match_anno = re.search(r'\b(\d{2,4})\b', stringa_nascita)
-                    anno_pulito = f"'{match_anno.group(1)[-2:]}" if match_anno else ""
+                for idx in range(1, 21):
+                    stringa_nome = " ".join(giocatori_per_indice[idx]).strip()
+                    # Rimuove caratteri speciali spuri o simboli rimasti dall'OCR
+                    stringa_nome = re.sub(r'[^a-zA-Z\sàèìòù🔍]', '', stringa_nome).strip()
                     
                     parole = stringa_nome.split()
                     if len(parole) >= 2:
                         cognome = parole[0].upper()
                         nome = " ".join(parole[1:]).title()
-                        riga_giocatore = f"{cognome} {nome}"
+                        giocatori_finali.append(f"{cognome} {nome}")
+                    elif len(parole) == 1:
+                        giocatori_finali.append(parole[0].upper())
                     else:
-                        riga_giocatore = parole[0].upper() if parole else ""
+                        giocatori_finali.append("")
                         
-                    if anno_pulito and riga_giocatore:
-                        riga_giocatore += f" ({anno_pulito})"
-                    if riga_giocatore:
-                        giocatori_finali.append(riga_giocatore)
-
-                giocatori_finali = list(dict.fromkeys(giocatori_finali))
-                while len(giocatori_finali) < 20:
-                    giocatori_finali.append("")
-                return giocatori_finali[:20], img_disegno
+                return giocatori_finali, img_disegno
 
             g_casa, img_visto_casa = analizza_e_disegna_squadra(foto_casa, "CASA")
             g_ospite, img_visto_ospite = analizza_e_disegna_squadra(foto_ospite, "OSPITE")
@@ -167,9 +159,9 @@ if foto_casa and foto_ospite:
             st.session_state.ospite_giocatori_input = g_ospite
             st.session_state.dati_pronti = True
             
-            st.success("Estrazione completata!")
+            st.success("Estrazione focalizzata completata!")
             visto_col1, visto_col2 = st.columns(2)
             with visto_col1:
-                st.image(img_visto_casa, caption="Allineamento geometrico CASA (Blu/Verde)", use_container_width=True)
+                st.image(img_visto_casa, caption="Area Nomi agganciata alla sequenza 1-20 (CASA)", use_container_width=True)
             with visto_col2:
-                st.image(img_visto_ospite, caption="Allineamento geometrico OSPITE (Blu/Verde)", use_container_width=True)
+                st.image(img_visto_ospite, caption="Area Nomi agganciata alla sequenza 1-20 (OSPITE)", use_container_width=True)
