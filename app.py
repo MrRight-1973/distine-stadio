@@ -156,7 +156,7 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                pdf_url = "https://streamlit.io"
+                pdf_url = "https://distinte-duecarrare.streamlit.app/"
                 
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
