@@ -68,7 +68,8 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices.message.content
+    # INDICE CORRETTO INSERITO ALLA RIGA 53
+    risultato_grezzo = response.choices[0].message.content
     if not risultato_grezzo:
         raise ValueError("OpenAI ha risposto con un contenuto vuoto.")
         
@@ -112,7 +113,7 @@ def genera_pdf(casa, ospite, info_gara):
         [Paragraph(f"<b>ARBITRO:</b> {pulisci_testo(info_gara['arbitro'])}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {pulisci_testo(info_gara['assistente1'])}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {pulisci_testo(info_gara['assistente2'])}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[275, 275])
+    t_info = Table(tabella_info_dati, colWidths=[270, 270])
     t_info.setStyle(TableStyle([
         ('LINEBELOW', (0,-1), (-1,-1), 1, colors.HexColor("#CBD5E0")),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -151,7 +152,7 @@ def genera_pdf(casa, ospite, info_gara):
     colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
-    macro_tabella = Table(macro_tabella_dati, colWidths=[255, 40, 255])
+    macro_tabella = Table(macro_tabella_dati, colWidths=[255, 30, 255])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
