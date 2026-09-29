@@ -2,16 +2,20 @@ import streamlit as st
 import json
 import base64
 
+import streamlit as st
+import json
+import base64
+
 def mostra_pagina_formazione():
     """Mostra una splendida pagina web ottimizzata per smartphone se rileva i dati nell'URL"""
-    params = st.query_parameters
+    # CORREZIONE: Aggiunte le parentesi tonde () per richiamare correttamente la funzione di Streamlit
+    params = st.query_parameters() 
     
     if "match" in params:
         try:
             # 1. Decodifichiamo i dati compressi passati dal QR Code
             dati_compressi = params["match"]
-            dati_json = base64.b64decode(dati_compressi).decode('utf-8')
-            match_data = json.loads(dati_json)
+
             
             # --- STILE GRAFICO AZZURRA DUE CARRARE ---
             st.markdown("""
