@@ -13,11 +13,17 @@ st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sul
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
+# Inizializzazione Session State
 if "griglia_casa" not in st.session_state:
     st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 if "griglia_ospite" not in st.session_state:
     st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
+if "macro_info" not in st.session_state:
+    st.session_state["macro_info"] = {}
+if "elaborato" not in st.session_state:
+    st.session_state["elaborato"] = False
 
+# Layout Caricamento File
 col_f1, col_f2 = st.columns(2)
 with col_f1:
     st.subheader("🏠 Squadra in Casa")
@@ -26,174 +32,52 @@ with col_f2:
     st.subheader("🚀 Squadra Ospite")
     file_ospite = st.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="ospite")
 
+# Fase 1: Scansione AI
 if file_casa and file_ospite:
-    if "dati_mappati" not in st.session_state:
-        if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
-            with st.spinner("L'AI sta leggendo le distinte..."):
-                try:
-                    casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
-                    ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
-                    
-                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
-                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
-                    st.session_state["macro_info"] = {"campionato": casa_raw["campionato"], "data": casa_raw["data"], "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"], "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]}
-                    st.session_state["dati_mappati"] = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante l'analisi visiva: {e}")
-
-if "dati_mappati" in st.session_state:
-    st.markdown("---")
-    st.header("✏️ Fase 2: Controllo, Correzione e Funzioni di Shift")
-    
-    info = st.session_state["macro_info"]
-    
-    st.subheader("🏁 Informazioni Generali Match")
-    c_g1, c_g2 = st.columns(2)
-    with c_g1:
-        edit_campionato = st.text_input("🏆 Campionato / Categoria", value=info["campionato"])
-        edit_arbitro = st.text_input("🏁 Arbitro (Nome e Cognome)", value="")
-        edit_ass1 = st.text_input("🚩 Assistente 1", value="")
-    with c_g2:
-        edit_data = st.text_input("📅 Data Partita", value=info["data"])
-        st.write("")
-        edit_ass2 = st.text_input("🚩 Assistente 2", value="")
-        
-    st.markdown("---")
-    
-    # Griglia principale per le due squadre
-    c_sq1, c_sq2 = st.columns(2)
-    
-    opzioni_righe = [i for i in range(1, 21)]
-    
-    # --- GESTIONE SQUADRA CASA ---
-    with c_sq1:
-        st.subheader("🏠 SQUADRA CASA")
-        edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
-        edit_all_casa = text_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
-        
-        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
-        
-        # Sotto-griglia bilanciata per i controlli Casa
-        c_ctrl_c1, c_ctrl_c2 = st.columns([1, 1])
-        with c_ctrl_c1:
-            riga_scelta_casa = st.selectbox("🎯 Riga (Casa)", options=opzioni_righe, index=12, key="sel_casa")
-        with c_ctrl_c2:
-            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
-            c_btn1, c_btn2 = st.columns(2)
-            with c_btn1:
-                if st.button("⬇️", key="shift_down_casa", use_container_width=True, help="Slitta in basso"):
-                    df = st.session_state["griglia_casa"].copy().reset_index()
-                    idx = riga_scelta_casa - 1
-                    nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
-                    df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                    st.rerun()
-            with c_btn2:
-                if st.button("⬆️", key="shift_up_casa", use_container_width=True, help="Slitta in alto"):
-                    df = st.session_state["griglia_casa"].copy().reset_index()
-                    idx = riga_scelta_casa - 1
-                    riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
-                    df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
-                    st.rerun()
-
-    # --- GESTIONE SQUADRA OSPITE ---
-    with c_sq2:
-        st.subheader("🚀 SQUADRA OSPITE")
-        edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
-        edit_all_ospite = st.text_input("Allenatore Ospite", value=info["all_ospite"])
-        
-        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, hide_index=False)
-        
-        # Sotto-griglia bilanciata per i controlli Ospite (Speculare alla Casa)
-        c_ctrl_o1, c_ctrl_o2 = st.columns([1, 1])
-        with c_ctrl_o1:
-            riga_scelta_ospite = st.selectbox("🎯 Riga (Ospite)", options=opzioni_righe, index=12, key="sel_ospite")
-        with c_ctrl_o2:
-            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
-            o_btn1, o_btn2 = st.columns(2)
-            with o_btn1:
-                if st.button("⬇️", key="shift_down_ospite", use_container_width=True, help="Slitta in basso"):
-                    df = st.session_state["griglia_ospite"].copy().reset_index()
-                    idx = riga_scelta_ospite - 1
-                    nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
-                    df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                    st.rerun()
-            with o_btn2:
-                if st.button("⬆️", key="shift_up_ospite", use_container_width=True, help="Slitta in alto"):
-                    df = st.session_state["griglia_ospite"].copy().reset_index()
-                    idx = riga_scelta_ospite - 1
-                    riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
-                    df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
-                    st.rerun()
-
-    # --- GENERAZIONE PDF FINALE ---
-    st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 definitivo..."):
+    if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
+        with st.spinner("L'AI sta leggendo le distinte..."):
             try:
-                giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
-                giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
+                casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
+                ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                 
-                squadra_casa_corretta = {
-                    "squadra": pulisci_testo(edit_nome_casa),
-                    "allenatore": pulisci_testo(edit_all_casa),
-                    "giocatori": giocatori_casa_salvati
+                # Conversione in DataFrame (assumendo che l'AI restituisca il campo "N°")
+                st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
+                st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
+                
+                # Salvataggio Macro Info (Completato il dizionario interrotto)
+                st.session_state["macro_info"] = {
+                    "campionato": casa_raw.get("campionato", ""),
+                    "data": casa_raw.get("data", ""),
+                    "squadra_casa": casa_raw.get("squadra", "Casa"),
+                    "all_casa": casa_raw.get("allenatore", ""),
+                    "squadra_ospite": ospite_raw.get("squadra", "Ospite"),
+                    "all_ospite": ospite_raw.get("allenatore", "")
                 }
-                squadra_ospite_corretta = {
-                    "squadra": pulisci_testo(edit_nome_ospite),
-                    "allenatore": pulisci_testo(edit_all_ospite),
-                    "giocatori": giocatori_ospite_salvati
-                }
-                info_gara_corrette = {
-                    "campionato": pulisci_testo(edit_campionato),
-                    "data": pulisci_testo(edit_data),
-                    "arbitro": pulisci_testo(edit_arbitro),
-                    "assistente1": pulisci_testo(edit_ass1),
-                    "assistente2": pulisci_testo(edit_ass2)
-                }
-                
-                pdf_url = "https://distinte-duecarrare.streamlit.app/"
-                
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
-                qr.add_data(pdf_url)
-                qr.make(fit=True)
-                img_qr = qr.make_image(fill_color="black", back_color="white")
-                buf_qr = io.BytesIO()
-                img_qr.save(buf_qr, format="PNG")
-                qr_bytes = buf_qr.getvalue()
-                
-                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
-                st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
-                
-            except Exception as ex:
-                st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
+                st.session_state["elaborato"] = True
+                st.success("Scansione completata con successo!")
+            except Exception as e:
+                st.error(f"Errore durante l'analisi delle distinte: {e}")
 
-if "pdf_interattivo_pronto" in st.session_state:
-    st.write("")
-    c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="💾 Scarica PDF per il Computer",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+# Fase 2: Visualizzazione e Modifica (Attiva solo se l'elaborazione è avvenuta)
+if st.session_state["elaborato"]:
+    st.divider()
+    st.subheader("📝 Fase 2: Modifica e Verifica i Dati")
+    
+    # Mostra Info Generali del Match
+    info = st.session_state["macro_info"]
+    st.info(f"**Competizione:** {info['campionato']} | **Data:** {info['data']}")
+    
+    col_ed1, col_ed2 = st.columns(2)
+    with col_ed1:
+        st.write(f"### {info['squadra_casa']} (Allenatore: {info['all_casa']})")
+        # st.data_editor permette la modifica manuale in tempo reale della griglia
+        griglia_casa_modificata = st.data_editor(st.session_state["griglia_casa"], num_rows="dynamic", key="editor_casa")
+    
+    with col_ed2:
+        st.write(f"### {info['squadra_ospite']} (Allenatore: {info['all_ospite']})")
+        griglia_ospite_modificata = st.data_editor(st.session_state["griglia_ospite"], num_rows="dynamic", key="editor_ospite")
+
+    # Esempio di bottone per generare il PDF finale
+    if st.button("📄 Genera PDF Distinta Unificata"):
+        # Qui richiami la funzione genera_pdf importata
+        st.write("Generazione in corso...")
