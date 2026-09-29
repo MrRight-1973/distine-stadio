@@ -145,7 +145,7 @@ if "dati_mappati" in st.session_state:
                 import datetime
                 from google.oauth2 import service_account
                 from googleapiclient.discovery import build
-                from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+                from googleapiclient.http import MediaIoBaseUpload
 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -168,15 +168,26 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # 1. Autenticazione con Google Drive tramite Secrets
-                creds_dict = st.secrets["google_credentials"]
+                # 1. Ricostruzione dinamica delle credenziali per evitare URL corrotti nei Secrets
                 folder_id = st.secrets.get("DRIVE_FOLDER_ID")
+                client_email = st.secrets.get("DRIVE_CLIENT_EMAIL")
+                project_id = st.secrets.get("DRIVE_PROJECT_ID")
+                private_key = st.secrets.get("DRIVE_PRIVATE_KEY")
                 
-                if not creds_dict or not folder_id:
-                    st.error("Credenziali Google o DRIVE_FOLDER_ID non trovati nei configuratori secrets!")
+                if not all([folder_id, client_email, project_id, private_key]):
+                    st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
-                    
-                creds = service_account.Credentials.from_service_account_info(creds_dict)
+                
+                # Ricostruiamo la struttura JSON standard attesa da Google
+                info_creds = {
+                    "type": "service_account",
+                    "project_id": project_id,
+                    "private_key": private_key,
+                    "client_email": client_email,
+                    "token_uri": "https://googleapis.com"
+                }
+                
+                creds = service_account.Credentials.from_service_account_info(info_creds)
                 drive_service = build('drive', 'v3', credentials=creds)
                 
                 # Nome del file unico basato sul tempo
@@ -204,7 +215,6 @@ if "dati_mappati" in st.session_state:
                 drive_service.permissions().create(fileId=file_id, body=permission_metadata).execute()
                 
                 # 5. Costruiamo il link diretto per la visualizzazione/anteprima immediata del PDF su Smartphone
-                # Rispetto al classico 'view', l'endpoint 'uc?id=' forza la visualizzazione pulita senza l'interfaccia di Drive
                 pdf_url = f"https://google.com{file_id}"
                 
                 # 6. Generiamo il QR Code reale associato a questo indirizzo di Google Drive
