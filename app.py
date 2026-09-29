@@ -145,8 +145,10 @@ if "dati_mappati" in st.session_state:
                 import datetime
                 import requests
                 import json
+                import io
+                import qrcode
                 from google.oauth2 import service_account
-                from google.auth.transport.requests import Request
+                import google.auth.transport.requests
 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -179,22 +181,31 @@ if "dati_mappati" in st.session_state:
                     st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
 
-                # 2. Generazione sicura dell'Access Token OAuth2 tramite l'oggetto Credentials ufficiale
+                # 2. Struttura del dizionario forzata con TUTTI gli endpoint richiesti per azzerare i fallback 404
                 info_creds = {
                     "type": "service_account",
                     "project_id": project_id,
+                    "private_key_id": "74446930d14900f6eab6bd3ff13bb44dcc9ec4c9",
                     "private_key": private_key,
                     "client_email": client_email,
-                    "token_uri": "https://googleapis.com"
+                    "client_id": "106839468953031910546",
+                    "auth_uri": "https://google.com",
+                    "token_uri": "https://googleapis.com",
+                    "auth_provider_x509_cert_url": "https://googleapis.com",
+                    "client_x509_cert_url": f"https://googleapis.com{client_email.replace('@', '%40')}"
                 }
                 
-                # Definiamo i permessi espliciti per la gestione dei file su Drive
                 scopes = ['https://googleapis.com']
                 creds = service_account.Credentials.from_service_account_info(info_creds, scopes=scopes)
                 
-                # Forziamo il recupero del token (gestisce internamente la firma e il parametro audience)
-                creds.refresh(Request())
+                # Usiamo l'oggetto Request standard per validare e richiedere il token in sicurezza
+                richiesta_trasporto = google.auth.transport.requests.Request()
+                creds.refresh(richiesta_trasporto)
                 access_token = creds.token
+                
+                if not access_token:
+                    st.error("Impossibile recuperare il token di accesso dai server di autenticazione Google.")
+                    st.stop()
                 
                 headers_auth = {"Authorization": f"Bearer {access_token}"}
 
@@ -206,7 +217,7 @@ if "dati_mappati" in st.session_state:
                 # 4. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
                 pdf_temporaneo_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 5. Caricamento iniziale su Google Drive tramite chiamata multipart nativa
+                # 5. Caricamento iniziale su Google Drive tramite chiamata multipart nativa REST v3
                 metadata = {
                     'name': nome_file_pdf,
                     'parents': [folder_id]
@@ -228,9 +239,13 @@ if "dati_mappati" in st.session_state:
                     
                 file_id = r_upload.json().get("id")
                 
-                # 6. Cambiamo i permessi del file per renderlo pubblico
+                # 6. Cambiamo i permessi del file per renderlo pubblico (Lettore per chiunque abbia il link)
                 perm_url = f"https://googleapis.com{file_id}/permissions"
-                requests.post(perm_url, headers=headers_auth, json={'role': 'reader', 'type': 'anyone'})
+                r_perm = requests.post(perm_url, headers=headers_auth, json={'role': 'reader', 'type': 'anyone'})
+                
+                if r_perm.status_code != 200:
+                    st.error(f"Impossibile impostare i permessi di condivisione su Drive: {r_perm.text}")
+                    st.stop()
                 
                 # 7. Costruiamo il link diretto per lo smartphone
                 pdf_url = f"https://google.com{file_id}"
