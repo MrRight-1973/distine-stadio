@@ -1,7 +1,10 @@
 streamlit
+pandas
+qrcode
+pillow
 openai
 reportlab
-qrcode[pil]
 requests
-Pillow
-pip install google-api-python-client google-auth
+google-api-python-client
+google-auth
+
