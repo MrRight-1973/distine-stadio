@@ -207,7 +207,7 @@ if "dati_mappati" in st.session_state:
                     json.dump(pacchetto_match, f_out)
                 
                 # URL CORTO E PULITO: I telefoni lo riconosceranno come sicuro al 100%
-                pdf_url = f"https://streamlit.app{id_partita}"
+                pdf_url = f"https://distinte-duecarrare.streamlit.app/"
                 
                 # Generazione fisica del QR Code ad alta leggibilità
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
