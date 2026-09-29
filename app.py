@@ -191,8 +191,8 @@ if "dati_mappati" in st.session_state:
                 url_storage = f"https://keyvalue.xyz{id_partita}"
                 response_cloud = requests.post(url_storage, data=json.dumps(pacchetto_match))
                 
-                # CORREZIONE CRITICA: Aggiunta la lista di codici di successo [200, 201] per completare il costrutto 'not in'
-                if response_cloud.status_code not in:
+                # CORREZIONE: Utilizzato un controllo diretto != 200 per evitare errori di sintassi
+                if response_cloud.status_code != 200:
                     # Se il servizio principale fallisce, usiamo un fallback sul link standard dell'app
                     pdf_url = "https://streamlit.app"
                     st.warning("Servizio cloud temporaneamente occupato. Il QR rimanderà alla pagina di gestione.")
