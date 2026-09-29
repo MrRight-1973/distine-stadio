@@ -10,6 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 def pulisci_testo(testo):
+    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
     if testo is None or str(testo).strip() == "":
         return ""
     testo_pulito = str(testo).replace("_", " ")
@@ -17,6 +18,7 @@ def pulisci_testo(testo):
     return testo_pulito.strip().upper()
 
 def encode_image(uploaded_file):
+    """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
@@ -26,6 +28,7 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
+    """Invia la foto a OpenAI ed estrae i dati in formato JSON garantendo 20 righe strutturate"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
@@ -94,6 +97,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     return dati
 
 def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
+    """Genera il file PDF A4 con colonne affiancate e QR code integrato"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
