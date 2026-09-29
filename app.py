@@ -11,10 +11,32 @@ from utils import pulisci_testo
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
 # ==============================================================================
-# --- CONTROLLO ACCESSO SMARTPHONE (INTERCETTAZIONE PARAMETRO URL BLINDATA) ---
+# --- CONTROLLO ACCESSO SMARTPHONE (RETROCOMPATIBILE E BLINDATO) ---
 # ==============================================================================
-params = st.query_parameters
-match_id = params.get("match")
+# Strategia di recupero universale per evitare l'AttributeError sulle vecchie versioni di Streamlit
+params = {}
+try:
+    if hasattr(st, "query_parameters"):
+        if callable(st.query_parameters):
+            params = st.query_parameters()
+        else:
+            params = st.query_parameters
+    else:
+        params = st.experimental_get_query_params()
+except Exception:
+    try:
+        params = st.experimental_get_query_params()
+    except Exception:
+        params = {}
+
+# Estraiamo il parametro 'match' gestendo sia il formato stringa che il formato lista
+match_id = None
+if "match" in params:
+    valore = params["match"]
+    if isinstance(valore, list) and len(valore) > 0:
+        match_id = valore[0]
+    else:
+        match_id = valore
 
 if match_id:
     try:
@@ -72,7 +94,7 @@ if match_id:
             st.write("")
             st.page_link(f"https://whatsapp.com{testo_condivisione}", label="📲 Condividi Formazione su WhatsApp", icon="💬")
             
-            st.stop() # INTERRUZIONE FORZATA: Nasconde completamente la pagina di gestione dei file
+            st.stop() # INTERRUZIONE FORZATA: Mostra solo lo schermo azzurro mobile
         else:
             st.error("Inquadratura fallita: i dati di questa partita non sono memorizzati sul server.")
             st.stop()
@@ -84,7 +106,6 @@ if match_id:
 # --- INTERFACCIA DI AMMINISTRAZIONE STANDARD (VISTA SOLO DA PC) ---
 # ==============================================================================
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
-# ... (Da qui in poi prosegui con il resto del tuo codice originale: "if griglia_casa not in st.session_state ecc...")
 
 if "griglia_casa" not in st.session_state:
     st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
