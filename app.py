@@ -259,14 +259,14 @@ if "dati_mappati" in st.session_state:
                 squadra_ospite_corretta = {"squadra": pulisci_testo(edit_nome_ospite), "allenatore": pulisci_testo(edit_all_ospite), "giocatori": giocatori_ospite_salvati}
                 info_gara_corrette = {"campionato": pulisci_testo(edit_campionato), "data": pulisci_testo(edit_data), "arbitro": pulisci_testo(edit_arbitro), "assistente1": pulisci_testo(edit_ass1), "assistente2": pulisci_testo(edit_ass2)}
                 
-                # Compattiamo solo i dati strettamente necessari per lo smartphone
-                casa_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_casa_salvati]
-                ospite_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_ospite_salvati]
+                # Compattiamo solo i dati necessari togliendo le righe vuote
+                casa_micro = [f"{g['N°']} - {g['GIOCATORE']} ({g['ANNO']})" for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
+                ospite_micro = [f"{g['N°']} - {g['GIOCATORE']} ({g['ANNO']})" for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
                 
                 dati_partita = {
                     "campionato": info_gara_corrette["campionato"], "data": info_gara_corrette["data"],
                     "arbitro": info_gara_corrette["arbitro"], "ass1": info_gara_corrette["assistente1"], "ass2": info_gara_corrette["assistente2"],
-                    "squadra_casa": squadra_casa_corretta["squadra"], "all_casa": squadra_casa_corretta["allenatore"], "giocatori_casa": casa_casa_micro,
+                    "squadra_casa": squadra_casa_corretta["squadra"], "all_casa": squadra_casa_corretta["allenatore"], "giocatori_casa": casa_micro,
                     "squadra_ospite": squadra_ospite_corretta["squadra"], "all_ospite": squadra_ospite_corretta["allenatore"], "giocatori_ospite": ospite_micro
                 }
                 
@@ -276,7 +276,7 @@ if "dati_mappati" in st.session_state:
                 url_encoded_data = urllib.parse.quote(base64_string)
                 
                 # --- IMPOSTA IL LINK DELLA TUA PAGINA GITHUB PAGES QUI ---
-                # Sostituisci questo indirizzo d'esempio con il link reale che ti ha dato GitHub Pages!
+                # Modifica questa stringa se il tuo utente GitHub è diverso da 'duecarrare'
                 link_pagina_esterna = "https://github.io"
                 
                 # Componiamo l'URL finale del QR Code
