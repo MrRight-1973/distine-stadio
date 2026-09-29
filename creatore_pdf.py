@@ -91,7 +91,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         return elementi_squadra
 
     colonna_casa = genera_tabella_squadra(casa, "SQUADRA OSPITANTE (CASA)")
-    colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE")
+    colonna_ospite = genera_tabella_squadra(ospite, "SQUADRA OSPITE") # Deve essere 'ospite'!
     
     macro_tabella_dati = [[colonna_casa, Paragraph("", normal_style), colonna_ospite]]
     macro_tabella = Table(macro_tabella_dati, colWidths=[260, 30, 260])
