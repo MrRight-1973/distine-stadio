@@ -5,5 +5,4 @@ pillow
 openai
 reportlab
 requests
-PyJWT[crypto]
 
