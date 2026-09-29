@@ -1,10 +1,9 @@
 import streamlit as st
 import json
-import base64
-import zlib
+import requests
 
 def mostra_pagina_formazione():
-    """Mostra la pagina web per lo smartphone decodificando i dati compressi dal QR"""
+    """Scarica i dati dal cloud usando la chiave corta dell'URL e mostra la formazione sul telefono"""
     params = {}
     try:
         if hasattr(st, "query_parameters"):
@@ -15,24 +14,30 @@ def mostra_pagina_formazione():
         try: params = st.experimental_get_query_params()
         except Exception: params = {}
 
-    match_param = None
+    match_id = None
     if "match" in params:
         valore = params["match"]
-        match_param = valore[0] if isinstance(valore, list) else valore
+        match_id = valore if isinstance(valore, list) else valore
     
-    if match_param:
+    # Se nell'URL c'è la chiave corta della partita, scarichiamo i dati e mostriamo lo schermo azzurro
+    if match_id:
         try:
-            # Decompressione sicura dei dati URL-Safe
-            dati_binari = base64.urlsafe_b64decode(match_param)
-            stringa_json = zlib.decompress(dati_binari).decode('utf-8')
-            pacchetto = json.loads(stringa_json)
+            # Scarichiamo il JSON della partita memorizzato nel cloud storage
+            url_storage = f"https://keyvalue.xyz{match_id}"
+            r_cloud = requests.get(url_storage)
             
-            # Estrazione dei dati in base alla nuova struttura a indici
-            info_lista = pacchetto["i"]
-            casa_lista = pacchetto["c"]
-            ospite_lista = pacchetto["o"]
+            if r_cloud.status_code != 200:
+                st.error("Formazione non trovata o scaduta nel database cloud.")
+                st.stop()
+                
+            pacchetto = r_cloud.json()
             
-            # --- STILE GRAFICO AZZURRA DUE CARRARE ---
+            # Assegnazione dei dati scaricati
+            info_lista = pacchetto["info"]
+            casa_lista = pacchetto["casa"]
+            ospite_lista = pacchetto["ospite"]
+            
+            # --- STILE GRAFICO ASD AZZURRA DUE CARRARE ---
             st.markdown("""
                 <style>
                 .main-title { color: #0096FF; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 2px; }
@@ -52,14 +57,16 @@ def mostra_pagina_formazione():
             
             col1, col2 = st.columns(2)
             
+            # Colonna Casa
             with col1:
                 st.markdown(f'<div class="card-team"><p class="team-name">🏠 {casa_lista[0]}</p>'
                             f'<p class="all-name"><b>All:</b> {casa_lista[1]}</p></div>', unsafe_allow_html=True)
-                for g in casa_lista[2]: # g è una lista tipo [Numero, Nome, Anno]
+                for g in casa_lista[2]: # Scorre la lista [Numero, Nome, Anno]
                     st.markdown(f'<div class="player-row"><div class="player-num">{g[0]}</div>'
                                 f'<div class="player-name">{g[1]}</div>'
                                 f'<div class="player-year">{g[2]}</div></div>', unsafe_allow_html=True)
             
+            # Colonna Ospite
             with col2:
                 st.markdown(f'<div class="card-team"><p class="team-name">🚀 {ospite_lista[0]}</p>'
                             f'<p class="all-name"><b>All:</b> {ospite_lista[1]}</p></div>', unsafe_allow_html=True)
@@ -70,7 +77,7 @@ def mostra_pagina_formazione():
                         
             st.markdown("---")
             st.caption(f"🏁 Arbitro: {info_lista[2]} | Assistenti: {info_lista[3]} - {info_lista[4]}")
-            st.stop()
+            st.stop() # Interrompe Streamlit mostrando solo lo schermo mobile
         except Exception as e:
-            st.error(f"Errore durante il caricamento dei dati: {e}")
+            st.error(f"Errore di connessione al database formazioni: {e}")
             st.stop()
