@@ -1,8 +1,3 @@
-# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE ---
-from pagine_web import mostra_pagina_formazione
-mostra_pagina_formazione() 
-# Se l'utente ha scansionato il QR, questa funzione si attiva e mostra solo la formazione, ignorando il pannello di gestione.
-
 import streamlit as st
 import io
 import qrcode
@@ -10,6 +5,11 @@ import pandas as pd
 from estrattore import analizza_distinta
 from creatore_pdf import genera_pdf
 from utils import pulisci_testo
+
+# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE ---
+from pagine_web import mostra_pagina_formazione
+mostra_pagina_formazione() 
+# Se l'utente ha scansionato il QR, questa funzione si attiva e mostra solo la formazione, ignorando il pannello di gestione.
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
@@ -144,11 +144,14 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE ---
+    # --- GENERAZIONE PDF FINALE CON QR CODE DINAMICO ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
+                import json
+                import base64
+                
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
@@ -170,10 +173,22 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Il QR code rimanda stabilmente all'indirizzo della tua applicazione
-                pdf_url = "https://streamlit.app"
+                # Compattiamo i dati del match in un pacchetto unico
+                pacchetto_match = {
+                    "info": info_gara_corrette,
+                    "casa": {"squadra": squadra_casa_corretta["squadra"], "allenatore": squadra_casa_corretta["allenatore"], "giocatori": squadra_casa_corretta["giocatori"]},
+                    "ospite": {"squadra": squadra_ospite_corretta["squadra"], "allenatore": squadra_ospite_corretta["allenatore"], "giocatori": squadra_ospite_corretta["giocatori"]}
+                }
                 
-                # Generazione del QR Code istituzionale dell'applicazione
+                # Trasformiamo i dati in stringa crittografata/compressa URL-Safe
+                stringa_json = json.dumps(pacchetto_match)
+                dati_codificati = base64.b64encode(stringa_json.encode('utf-8')).decode('utf-8')
+                
+                # CREAZIONE URL REALE PER IL QR CODE
+                # Quando viene scansionato, rimanda alla tua app passando l'intero blocco dati
+                pdf_url = f"https://streamlit.app{dati_codificati}"
+                
+                # Generazione fisica del QR Code
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -182,10 +197,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione finale del PDF in memoria pronto per il download immediato
+                # Generazione del PDF cartaceo
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code generati con successo!")
+                st.session_state["ultimo_qr_link"] = pdf_url # Salviamo il link per l'anteprima
+                st.success("🎉 Distinta A4 e Pagina Mobile collegate con successo!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
@@ -213,3 +229,9 @@ if "pdf_interattivo_pronto" in st.session_state:
             type="primary",
             use_container_width=True
         )
+        
+if "pdf_interattivo_pronto" in st.session_state and "ultimo_qr_link" in st.session_state:
+    st.markdown("---")
+    st.markdown("### 📱 Anteprima della Pagina Web per Smartphone")
+    st.write("Puoi inquadrare questo codice adesso con il tuo telefono per verificare la pagina delle formazioni:")
+    st.qrcode(st.session_state["ultimo_qr_link"])
