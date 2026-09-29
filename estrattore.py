@@ -8,11 +8,17 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
+    # PROMPT SUPER RAFFORZATO: Istruzioni ultra-dettagliate per non perdere il capitano di nessuna delle due squadre
     prompt_sistema = (
         f"Sei un assistente esperto di calcio LND. Il tuo compito attuale è scansionare la distinta della SQUADRA {ruolo_squadra}.\n"
         f"ATTENZIONE CRITICA: Devi estrarre esclusivamente il nome della società e dell'allenatore relativi alla squadra che gioca in {ruolo_squadra}. "
-        "Non confonderla con la squadra avversaria.\n"
-        "IDENTIFICAZIONE RUOLI: Cerca tra i giocatori chi è il Capitano (spesso indicato con (C), CAP, o una fascia) e il Vice Capitano (indicato con (VC), VICE, V.CAP).\n\n"
+        "Non confonderla con la squadra avversaria.\n\n"
+        f"RICERCA CAPITANO E VICE (FONDAMENTALE PER LA SQUADRA {ruolo_squadra}):\n"
+        "Esamina attentamente ogni singola riga dei calciatori per trovare il Capitano e il Vice Capitano. Nei fogli LND possono essere indicati in modi molto diversi, cercali tutti:\n"
+        "- Controlla se a fianco o sotto il nome c'è scritto: (C), CAP, CAPITANO, (VC), VICE, V.CAP, V.CAPITANO.\n"
+        "- Controlla se prima o dopo il numero di maglia ci sono lettere isolate come 'C' o 'V', oppure simboli come asterischi (*).\n"
+        "- Guarda se il numero di maglia ha un cerchio intorno o se c'è una nota scritta a penna di fianco al calciatore.\n"
+        "Trova ASSOLUTAMENTE un capitano e un vice per questa squadra se presenti sul foglio.\n\n"
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
         "  \"squadra\": \"Nome Squadra\",\n"
@@ -35,7 +41,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai l'elenco dei giocatori, Capitano/Vice, squadra e allenatore per la squadra {ruolo_squadra} in formato json."},
+                    {"type": "text", "text": f"Estrai con la massima cura l'elenco dei giocatori, il Capitano e il Vice Capitano della squadra {ruolo_squadra} in formato json."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -75,7 +81,10 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             if 1 <= num <= 20:
                 nome_puro = pulisci_testo(g.get("cognome_nome", ""))
                 
-                # Aggiungiamo i suffissi ai nomi se corrispondono ai numeri rilevati
+                # Rimuove eventuali (C) o (VC) duplicati già letti dal testo grezzo dell'AI
+                nome_puro = nome_puro.replace("(C)", "").replace("(VC)", "").strip()
+                
+                # Applica la formattazione pulita basata sui numeri confermati dal modello
                 if num == num_cap:
                     nome_puro += " (C)"
                 elif num == num_vice:
