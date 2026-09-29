@@ -1,6 +1,8 @@
 import streamlit as st
 import io
 import qrcode
+import requests
+import base64
 import pandas as pd
 from estrattore import analizza_distinta, genera_pdf, pulisci_testo
 
@@ -11,11 +13,10 @@ st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sul
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
-# Inizializzazione corretta dello stato delle griglie
 if "griglia_casa" not in st.session_state:
-    st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)])
+    st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 if "griglia_ospite" not in st.session_state:
-    st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)])
+    st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 
 col_f1, col_f2 = st.columns(2)
 with col_f1:
@@ -33,16 +34,9 @@ if file_casa and file_ospite:
                     casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                     ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
-                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"])
-                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"])
-                    st.session_state["macro_info"] = {
-                        "campionato": casa_raw["campionato"], 
-                        "data": casa_raw["data"], 
-                        "squadra_casa": casa_raw["squadra"], 
-                        "all_casa": casa_raw["allenatore"], 
-                        "squadra_ospite": ospite_raw["squadra"], 
-                        "all_ospite": ospite_raw["allenatore"]
-                    }
+                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
+                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
+                    st.session_state["macro_info"] = {"campionato": casa_raw["campionato"], "data": casa_raw["data"], "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"], "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]}
                     st.session_state["dati_mappati"] = True
                     st.rerun()
                 except Exception as e:
@@ -67,47 +61,43 @@ if "dati_mappati" in st.session_state:
         
     st.markdown("---")
     
+    # Griglia principale per le due squadre
     c_sq1, c_sq2 = st.columns(2)
+    
     opzioni_righe = [i for i in range(1, 21)]
     
     # --- GESTIONE SQUADRA CASA ---
     with c_sq1:
         st.subheader("🏠 SQUADRA CASA")
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
-        edit_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
+        edit_all_casa = text_all_casa = st.text_input("Allenatore Ospitante", value=info["all_casa"])
         
-        st.session_state["griglia_casa"] = st.data_editor(
-            st.session_state["griglia_casa"], 
-            key="editor_casa_current", 
-            use_container_width=True, 
-            disabled=["N°"],
-            hide_index=True
-        )
+        st.session_state["griglia_casa"] = st.data_editor(st.session_state["griglia_casa"], key="editor_casa_current", use_container_width=True, hide_index=False)
         
-        # CORREZIONE QUI: Specificato esplicitamente 2 colonne
-        c_ctrl_c1, c_ctrl_c2 = st.columns(2)
+        # Sotto-griglia bilanciata per i controlli Casa
+        c_ctrl_c1, c_ctrl_c2 = st.columns([1, 1])
         with c_ctrl_c1:
-            riga_scelta_casa = st.selectbox("🎯 Inserisci riga vuota a (Casa)", options=opzioni_righe, index=11, key="sel_casa")
+            riga_scelta_casa = st.selectbox("🎯 Riga (Casa)", options=opzioni_righe, index=12, key="sel_casa")
         with c_ctrl_c2:
-            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True)
+            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
-                if st.button("⬇️", key="shift_down_casa", use_container_width=True, help="Slitta in basso (inserisce riga vuota qui)"):
-                    df = st.session_state["griglia_casa"].copy()
+                if st.button("⬇️", key="shift_down_casa", use_container_width=True, help="Slitta in basso"):
+                    df = st.session_state["griglia_casa"].copy().reset_index()
                     idx = riga_scelta_casa - 1
                     nuova_riga = pd.DataFrame([{"N°": riga_scelta_casa, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:]]).head(20).reset_index(drop=True)
+                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
                     df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_casa"] = df_nuovo
+                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
                     st.rerun()
             with c_btn2:
-                if st.button("🗑️", key="shift_up_casa", use_container_width=True, help="Elimina riga (slitta in alto)"):
-                    df = st.session_state["griglia_casa"].copy()
+                if st.button("⬆️", key="shift_up_casa", use_container_width=True, help="Slitta in alto"):
+                    df = st.session_state["griglia_casa"].copy().reset_index()
                     idx = riga_scelta_casa - 1
                     riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
                     df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
                     df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_casa"] = df_nuovo
+                    st.session_state["griglia_casa"] = df_nuovo.set_index("N°")
                     st.rerun()
 
     # --- GESTIONE SQUADRA OSPITE ---
@@ -116,38 +106,32 @@ if "dati_mappati" in st.session_state:
         edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
         edit_all_ospite = st.text_input("Allenatore Ospite", value=info["all_ospite"])
         
-        st.session_state["griglia_ospite"] = st.data_editor(
-            st.session_state["griglia_ospite"], 
-            key="editor_ospite_current", 
-            use_container_width=True, 
-            disabled=["N°"],
-            hide_index=True
-        )
+        st.session_state["griglia_ospite"] = st.data_editor(st.session_state["griglia_ospite"], key="editor_ospite_current", use_container_width=True, hide_index=False)
         
-        # CORREZIONE QUI: Specificato esplicitamente 2 colonne
-        c_ctrl_o1, c_ctrl_o2 = st.columns(2)
+        # Sotto-griglia bilanciata per i controlli Ospite (Speculare alla Casa)
+        c_ctrl_o1, c_ctrl_o2 = st.columns([1, 1])
         with c_ctrl_o1:
-            riga_scelta_ospite = st.selectbox("🎯 Inserisci riga vuota a (Ospite)", options=opzioni_righe, index=11, key="sel_ospite")
+            riga_scelta_ospite = st.selectbox("🎯 Riga (Ospite)", options=opzioni_righe, index=12, key="sel_ospite")
         with c_ctrl_o2:
-            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True)
+            st.write(" <div style='padding-top: 24px;'></div>", unsafe_allow_html=True) # Allinea i pulsanti verticalmente al selectbox
             o_btn1, o_btn2 = st.columns(2)
             with o_btn1:
-                if st.button("⬇️", key="shift_down_ospite", use_container_width=True, help="Slitta in basso (inserisce riga vuota qui)"):
-                    df = st.session_state["griglia_ospite"].copy()
+                if st.button("⬇️", key="shift_down_ospite", use_container_width=True, help="Slitta in basso"):
+                    df = st.session_state["griglia_ospite"].copy().reset_index()
                     idx = riga_scelta_ospite - 1
                     nuova_riga = pd.DataFrame([{"N°": riga_scelta_ospite, "GIOCATORE": "", "ANNO": ""}])
-                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:]]).head(20).reset_index(drop=True)
+                    df_nuovo = pd.concat([df.iloc[:idx], nuova_riga, df.iloc[idx:19]]).reset_index(drop=True)
                     df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_ospite"] = df_nuovo
+                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
             with o_btn2:
-                if st.button("🗑️", key="shift_up_ospite", use_container_width=True, help="Elimina riga (slitta in alto)"):
-                    df = st.session_state["griglia_ospite"].copy()
+                if st.button("⬆️", key="shift_up_ospite", use_container_width=True, help="Slitta in alto"):
+                    df = st.session_state["griglia_ospite"].copy().reset_index()
                     idx = riga_scelta_ospite - 1
                     riga_vuota_finale = pd.DataFrame([{"N°": 20, "GIOCATORE": "", "ANNO": ""}])
                     df_nuovo = pd.concat([df.iloc[:idx], df.iloc[idx+1:], riga_vuota_finale]).reset_index(drop=True)
                     df_nuovo["N°"] = range(1, 21)
-                    st.session_state["griglia_ospite"] = df_nuovo
+                    st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
     # --- GENERAZIONE PDF FINALE ---
@@ -155,8 +139,8 @@ if "dati_mappati" in st.session_state:
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
             try:
-                giocatori_casa_salvati = st.session_state["griglia_casa"].to_dict(orient="records")
-                giocatori_ospite_salvati = st.session_state["griglia_ospite"].to_dict(orient="records")
+                giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
+                giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
                 squadra_casa_corretta = {
                     "squadra": pulisci_testo(edit_nome_casa),
@@ -176,7 +160,7 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                pdf_url = "https://streamlit.app"
+                pdf_url = "https://distinte-duecarrare.streamlit.app/"
                 
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
@@ -189,26 +173,27 @@ if "dati_mappati" in st.session_state:
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
+                
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
 
 if "pdf_interattivo_pronto" in st.session_state:
     st.write("")
-c_dl1, c_dl2 = st.columns(2)
-with c_dl1:
-st.download_button(
-label="💾 Scarica PDF per il Computer",
-data=st.session_state["pdf_interattivo_pronto"],
-file_name="distinta_ufficiale_A4.pdf",
-mime="application/pdf",
-use_container_width=True
-)
-with c_dl2:
-st.download_button(
-label="📥 Scarica PDF su Smartphone",
-data=st.session_state["pdf_interattivo_pronto"],
-file_name="distinta_ufficiale_A4_mobile.pdf",
-mime="application/pdf",
-type="primary",
-use_container_width=True
-)
+    c_dl1, c_dl2 = st.columns(2)
+    with c_dl1:
+        st.download_button(
+            label="💾 Scarica PDF per il Computer",
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    with c_dl2:
+        st.download_button(
+            label="📥 Scarica PDF su Smartphone",
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4_mobile.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
