@@ -4,3 +4,4 @@ reportlab
 qrcode[pil]
 requests
 Pillow
+pip install google-api-python-client google-auth
