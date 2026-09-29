@@ -143,10 +143,10 @@ if "dati_mappati" in st.session_state:
         with st.spinner("Generazione del foglio di gara e caricamento su Google Drive..."):
             try:
                 import datetime
-                import time
                 import requests
-                # Sfruttiamo una libreria standard leggera inclusa in google-auth per firmare il token JWT
-                from google.auth import jwt 
+                import json
+                from google.oauth2 import service_account
+                from google.auth.transport.requests import Request
 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -172,44 +172,30 @@ if "dati_mappati" in st.session_state:
                 # 1. Recupero parametri dai Secrets
                 folder_id = st.secrets.get("DRIVE_FOLDER_ID")
                 client_email = st.secrets.get("DRIVE_CLIENT_EMAIL")
+                project_id = st.secrets.get("DRIVE_PROJECT_ID")
                 private_key = st.secrets.get("DRIVE_PRIVATE_KEY")
                 
-                if not all([folder_id, client_email, private_key]):
+                if not all([folder_id, client_email, project_id, private_key]):
                     st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
 
-                # 2. Generazione manuale e sicura dell'Access Token OAuth2 (No chiamate esterne instabili)
-                iat = int(time.time())
-                exp = iat + 3600
-                payload = {
-                    'iss': client_email,
-                    'sub': client_email,
-                    'scope': 'https://googleapis.com',
-                    'aud': 'https://googleapis.com',
-                    'iat': iat,
-                    'exp': exp
+                # 2. Generazione sicura dell'Access Token OAuth2 tramite l'oggetto Credentials ufficiale
+                info_creds = {
+                    "type": "service_account",
+                    "project_id": project_id,
+                    "private_key": private_key,
+                    "client_email": client_email,
+                    "token_uri": "https://googleapis.com"
                 }
                 
-                # Firmiamo il JWT usando la chiave privata dei tuoi secrets
-                signer = jwt.Credentials.from_service_account_info({
-                    "private_key": private_key,
-                    "client_email": client_email
-                })
+                # Definiamo i permessi espliciti per la gestione dei file su Drive
+                scopes = ['https://googleapis.com']
+                creds = service_account.Credentials.from_service_account_info(info_creds, scopes=scopes)
                 
-                # Effettuiamo la richiesta di token a Google
-                r_token = requests.post(
-                    'https://googleapis.com',
-                    data={
-                        'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                        'assertion': jwt.encode(signer._signer, payload)
-                    }
-                )
+                # Forziamo il recupero del token (gestisce internamente la firma e il parametro audience)
+                creds.refresh(Request())
+                access_token = creds.token
                 
-                if r_token.status_code != 200:
-                    st.error(f"Errore autenticazione Google: {r_token.text}")
-                    st.stop()
-                    
-                access_token = r_token.json().get("access_token")
                 headers_auth = {"Authorization": f"Bearer {access_token}"}
 
                 # 3. Prepariamo i metadati del file unico
@@ -220,7 +206,7 @@ if "dati_mappati" in st.session_state:
                 # 4. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
                 pdf_temporaneo_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 5. Caricamento iniziale su Google Drive tramite chiamata multipart nativa (Risolve il 404 all'origine)
+                # 5. Caricamento iniziale su Google Drive tramite chiamata multipart nativa
                 metadata = {
                     'name': nome_file_pdf,
                     'parents': [folder_id]
