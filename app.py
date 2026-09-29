@@ -243,78 +243,59 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE CON FILE SYSTEM INTERNO (ZERO FILTRI DI SICUREZZA) ---
+    # --- GENERAZIONE PDF CON PAGINA WEB ESTERNA STATICA ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Salvataggio della formazione nel sistema e ottimizzazione QR..."):
+        with st.spinner("Compilazione distinta e sincronizzazione pagina esterna..."):
             try:
                 import json
-                import os
-                import secrets
+                import base64
+                import urllib.parse
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                squadra_casa_corretta = {
-                    "squadra": pulisci_testo(edit_nome_casa),
-                    "allenatore": pulisci_testo(edit_all_casa),
-                    "giocatori": giocatori_casa_salvati
-                }
-                squadra_ospite_corretta = {
-                    "squadra": pulisci_testo(edit_nome_ospite),
-                    "allenatore": pulisci_testo(edit_all_ospite),
-                    "giocatori": giocatori_ospite_salvati
-                }
-                info_gara_corrette = {
-                    "campionato": pulisci_testo(edit_campionato),
-                    "data": pulisci_testo(edit_data),
-                    "arbitro": pulisci_testo(edit_arbitro),
-                    "assistente1": pulisci_testo(edit_ass1),
-                    "assistente2": pulisci_testo(edit_ass2)
+                squadra_casa_corretta = {"squadra": pulisci_testo(edit_nome_casa), "allenatore": pulisci_testo(edit_all_casa), "giocatori": giocatori_casa_salvati}
+                squadra_ospite_corretta = {"squadra": pulisci_testo(edit_nome_ospite), "allenatore": pulisci_testo(edit_all_ospite), "giocatori": giocatori_ospite_salvati}
+                info_gara_corrette = {"campionato": pulisci_testo(edit_campionato), "data": pulisci_testo(edit_data), "arbitro": pulisci_testo(edit_arbitro), "assistente1": pulisci_testo(edit_ass1), "assistente2": pulisci_testo(edit_ass2)}
+                
+                # Compattiamo solo i dati strettamente necessari per lo smartphone
+                casa_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_casa_salvati]
+                ospite_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_ospite_salvati]
+                
+                dati_partita = {
+                    "campionato": info_gara_corrette["campionato"], "data": info_gara_corrette["data"],
+                    "arbitro": info_gara_corrette["arbitro"], "ass1": info_gara_corrette["assistente1"], "ass2": info_gara_corrette["assistente2"],
+                    "squadra_casa": squadra_casa_corretta["squadra"], "all_casa": squadra_casa_corretta["allenatore"], "giocatori_casa": casa_casa_micro,
+                    "squadra_ospite": squadra_ospite_corretta["squadra"], "all_ospite": squadra_ospite_corretta["allenatore"], "giocatori_ospite": ospite_micro
                 }
                 
-                # Filtriamo le righe vuote dei giocatori
-                lista_casa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
-                lista_ospite = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
+                # Convertiamo i dati in un formato compatto sicuro per il browser (Base64)
+                json_string = json.dumps(dati_partita)
+                base64_string = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+                url_encoded_data = urllib.parse.quote(base64_string)
                 
-                pacchetto_match = {
-                    "info": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
-                    "casa": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa],
-                    "ospite": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite]
-                }
+                # --- IMPOSTA IL LINK DELLA TUA PAGINA GITHUB PAGES QUI ---
+                # Sostituisci questo indirizzo d'esempio con il link reale che ti ha dato GitHub Pages!
+                link_pagina_esterna = "https://github.io"
                 
-                # Generiamo un identificativo cortissimo di 6 lettere per la partita
-                id_partita = secrets.token_hex(3)
+                # Componiamo l'URL finale del QR Code
+                pdf_url = f"{link_pagina_esterna.rstrip('/')}/?dati={url_encoded_data}"
                 
-                # Salviamo il file JSON direttamente nella memoria del server Streamlit
-                # Creiamo una cartella temporanea se non esiste
-                if not os.path.exists("match_data"):
-                    os.makedirs("match_data")
-                    
-                percorso_file = os.path.join("match_data", f"{id_partita}.json")
-                with open(percorso_file, "w", encoding="utf-8") as f_out:
-                    json.dump(pacchetto_match, f_out)
-                
-                # URL CORTO E PULITO: I telefoni lo riconosceranno come sicuro al 100%
-                pdf_url = f"https://distinte-duecarrare.streamlit.app/"
-                
-                # Generazione fisica del QR Code ad alta leggibilità
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+                # Generazione fisica del QR Code
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=5, border=2)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
                 img_qr = qr.make_image(fill_color="black", back_color="white")
                 buf_qr = io.BytesIO()
                 img_qr.save(buf_qr, format="PNG")
-                qr_bytes = buf_qr.getvalue()
                 
-                # Generazione della distinta PDF finale da stampare
-                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
+                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, buf_qr.getvalue())
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.session_state["ultimo_qr_link"] = pdf_url
-                st.success("🎉 Distinta unificata e QR Code protetto generati!")
-                
+                st.success("🎉 Distinta A4 generata e collegata alla pagina web esterna!")
             except Exception as ex:
-                st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
+                st.error(f"Errore di compilazione: {ex}")
 
 # --- VISUALIZZAZIONE PULSANTI DI DOWNLOAD DIRETTO ---
 if "pdf_interattivo_pronto" in st.session_state:
