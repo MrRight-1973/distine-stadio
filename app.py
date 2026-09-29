@@ -188,15 +188,15 @@ if "pdf_interattivo_pronto" in st.session_state:
             label="💾 Scarica PDF per il Computer",
             data=st.session_state["pdf_interattivo_pronto"],
             file_name="distinta_ufficiale_A4.pdf",
-mime="application/pdf",
-use_container_width=True
-)
-with c_dl2:
-st.download_button(
-label="📥 Scarica PDF su Smartphone",
-data=st.session_state["pdf_interattivo_pronto"],
-file_name="distinta_ufficiale_A4_mobile.pdf",
-mime="application/pdf",
-type="primary",
-use_container_width=True
-)
+            mime="application/pdf",
+            use_container_width=True
+        )
+    with c_dl2:
+        st.download_button(
+            label="📥 Scarica PDF su Smartphone",
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4_mobile.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
