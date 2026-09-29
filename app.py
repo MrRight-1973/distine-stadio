@@ -143,9 +143,10 @@ if "dati_mappati" in st.session_state:
         with st.spinner("Generazione del foglio di gara e caricamento su Google Drive..."):
             try:
                 import datetime
-                from google.oauth2 import service_account
-                from googleapiclient.discovery import build
-                from googleapiclient.http import MediaIoBaseUpload
+                import time
+                import requests
+                # Sfruttiamo una libreria standard leggera inclusa in google-auth per firmare il token JWT
+                from google.auth import jwt 
 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -171,54 +172,84 @@ if "dati_mappati" in st.session_state:
                 # 1. Recupero parametri dai Secrets
                 folder_id = st.secrets.get("DRIVE_FOLDER_ID")
                 client_email = st.secrets.get("DRIVE_CLIENT_EMAIL")
-                project_id = st.secrets.get("DRIVE_PROJECT_ID")
                 private_key = st.secrets.get("DRIVE_PRIVATE_KEY")
                 
-                if not all([folder_id, client_email, project_id, private_key]):
+                if not all([folder_id, client_email, private_key]):
                     st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
-                
-                info_creds = {
-                    "type": "service_account",
-                    "project_id": project_id,
-                    "private_key": private_key,
-                    "client_email": client_email,
-                    "token_uri": "https://googleapis.com"
+
+                # 2. Generazione manuale e sicura dell'Access Token OAuth2 (No chiamate esterne instabili)
+                iat = int(time.time())
+                exp = iat + 3600
+                payload = {
+                    'iss': client_email,
+                    'sub': client_email,
+                    'scope': 'https://googleapis.com',
+                    'aud': 'https://googleapis.com',
+                    'iat': iat,
+                    'exp': exp
                 }
                 
-                creds = service_account.Credentials.from_service_account_info(info_creds)
+                # Firmiamo il JWT usando la chiave privata dei tuoi secrets
+                signer = jwt.Credentials.from_service_account_info({
+                    "private_key": private_key,
+                    "client_email": client_email
+                })
                 
-                # CORREZIONE CRITICA: static_discovery=False impedisce a Google di fare la chiamata HTTP che generava l'errore 404
-                drive_service = build('drive', 'v3', credentials=creds, static_discovery=False)
+                # Effettuiamo la richiesta di token a Google
+                r_token = requests.post(
+                    'https://googleapis.com',
+                    data={
+                        'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                        'assertion': jwt.encode(signer._signer, payload)
+                    }
+                )
                 
-                # Nome del file unico basato sul tempo
+                if r_token.status_code != 200:
+                    st.error(f"Errore autenticazione Google: {r_token.text}")
+                    st.stop()
+                    
+                access_token = r_token.json().get("access_token")
+                headers_auth = {"Authorization": f"Bearer {access_token}"}
+
+                # 3. Prepariamo i metadati del file unico
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 nome_societa = pulisci_testo(edit_nome_casa).replace(" ", "_")
                 nome_file_pdf = f"distinta_{nome_societa}_{timestamp}.pdf"
 
-                # 2. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
+                # 4. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
                 pdf_temporaneo_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 3. Primo caricamento del file grezzo su Google Drive
-                file_metadata = {
+                # 5. Caricamento iniziale su Google Drive tramite chiamata multipart nativa (Risolve il 404 all'origine)
+                metadata = {
                     'name': nome_file_pdf,
                     'parents': [folder_id]
                 }
-                media = MediaIoBaseUpload(io.BytesIO(pdf_temporaneo_bytes), mimetype='application/pdf', resumable=True)
-                file_drive = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-                file_id = file_drive.get('id')
-                
-                # 4. Cambiamo i permessi del file per renderlo pubblico (necessario per far funzionare il QR Code)
-                permission_metadata = {
-                    'type': 'anyone',
-                    'role': 'reader'
+                files = {
+                    'data': (None, json.dumps(metadata), 'application/json; charset=UTF-8'),
+                    'file': (nome_file_pdf, pdf_temporaneo_bytes, 'application/pdf')
                 }
-                drive_service.permissions().create(fileId=file_id, body=permission_metadata).execute()
                 
-                # 5. Costruiamo il link diretto per la visualizzazione pulita del PDF da smartphone
+                r_upload = requests.post(
+                    'https://googleapis.com',
+                    headers=headers_auth,
+                    files=files
+                )
+                
+                if r_upload.status_code != 200:
+                    st.error(f"Errore durante l'upload iniziale su Drive: {r_upload.text}")
+                    st.stop()
+                    
+                file_id = r_upload.json().get("id")
+                
+                # 6. Cambiamo i permessi del file per renderlo pubblico
+                perm_url = f"https://googleapis.com{file_id}/permissions"
+                requests.post(perm_url, headers=headers_auth, json={'role': 'reader', 'type': 'anyone'})
+                
+                # 7. Costruiamo il link diretto per lo smartphone
                 pdf_url = f"https://google.com{file_id}"
                 
-                # 6. Generiamo il QR Code reale associato all'ID del file di Drive
+                # 8. Generiamo il QR Code reale associato a questo link
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -227,12 +258,19 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # 7. Rigeneriamo il PDF completo includendo il QR Code stampato sopra
+                # 9. Rigeneriamo il PDF completo includendo il QR Code reale stampato sopra
                 pdf_finale_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 
-                # 8. Aggiorniamo il file su Google Drive inserendo la versione definitiva con il QR funzionante
-                media_aggiornato = MediaIoBaseUpload(io.BytesIO(pdf_finale_bytes), mimetype='application/pdf', resumable=True)
-                drive_service.files().update(fileId=file_id, media_body=media_aggiornato).execute()
+                # 10. Aggiorniamo il file su Google Drive inserendo la versione con il QR Code definitivo
+                update_url = f"https://googleapis.com{file_id}?uploadType=media"
+                headers_update = headers_auth.copy()
+                headers_update["Content-Type"] = "application/pdf"
+                
+                r_update = requests.patch(update_url, headers=headers_update, data=pdf_finale_bytes)
+                
+                if r_update.status_code != 200:
+                    st.error(f"Errore durante l'aggiornamento finale del PDF: {r_update.text}")
+                    st.stop()
                 
                 # Salvataggio nello stato dell'applicazione
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale_bytes
