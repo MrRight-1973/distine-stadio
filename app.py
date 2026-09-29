@@ -11,6 +11,7 @@ st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sul
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
+# Inizializzazione corretta dello stato delle griglie
 if "griglia_casa" not in st.session_state:
     st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)])
 if "griglia_ospite" not in st.session_state:
@@ -69,6 +70,7 @@ if "dati_mappati" in st.session_state:
     c_sq1, c_sq2 = st.columns(2)
     opzioni_righe = [i for i in range(1, 21)]
     
+    # --- GESTIONE SQUADRA CASA ---
     with c_sq1:
         st.subheader("🏠 SQUADRA CASA")
         edit_nome_casa = st.text_input("Nome Società Ospitante", value=info["squadra_casa"])
@@ -82,7 +84,8 @@ if "dati_mappati" in st.session_state:
             hide_index=True
         )
         
-        c_ctrl_c1, c_ctrl_c2 = st.columns()
+        # CORREZIONE QUI: Specificato esplicitamente 2 colonne
+        c_ctrl_c1, c_ctrl_c2 = st.columns(2)
         with c_ctrl_c1:
             riga_scelta_casa = st.selectbox("🎯 Inserisci riga vuota a (Casa)", options=opzioni_righe, index=11, key="sel_casa")
         with c_ctrl_c2:
@@ -107,6 +110,7 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_casa"] = df_nuovo
                     st.rerun()
 
+    # --- GESTIONE SQUADRA OSPITE ---
     with c_sq2:
         st.subheader("🚀 SQUADRA OSPITE")
         edit_nome_ospite = st.text_input("Nome Società Ospite", value=info["squadra_ospite"])
@@ -120,7 +124,8 @@ if "dati_mappati" in st.session_state:
             hide_index=True
         )
         
-        c_ctrl_o1, c_ctrl_o2 = st.columns()
+        # CORREZIONE QUI: Specificato esplicitamente 2 colonne
+        c_ctrl_o1, c_ctrl_o2 = st.columns(2)
         with c_ctrl_o1:
             riga_scelta_ospite = st.selectbox("🎯 Inserisci riga vuota a (Ospite)", options=opzioni_righe, index=11, key="sel_ospite")
         with c_ctrl_o2:
@@ -145,6 +150,7 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo
                     st.rerun()
 
+    # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Generazione del foglio di gara A4 definitivo..."):
@@ -170,7 +176,7 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                pdf_url = "https://distinte-duecarrare.streamlit.app/"
+                pdf_url = "https://streamlit.app"
                 
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
@@ -188,21 +194,21 @@ if "dati_mappati" in st.session_state:
 
 if "pdf_interattivo_pronto" in st.session_state:
     st.write("")
-    c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="💾 Scarica PDF per il Computer",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+c_dl1, c_dl2 = st.columns(2)
+with c_dl1:
+st.download_button(
+label="💾 Scarica PDF per il Computer",
+data=st.session_state["pdf_interattivo_pronto"],
+file_name="distinta_ufficiale_A4.pdf",
+mime="application/pdf",
+use_container_width=True
+)
+with c_dl2:
+st.download_button(
+label="📥 Scarica PDF su Smartphone",
+data=st.session_state["pdf_interattivo_pronto"],
+file_name="distinta_ufficiale_A4_mobile.pdf",
+mime="application/pdf",
+type="primary",
+use_container_width=True
+)
