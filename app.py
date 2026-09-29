@@ -140,10 +140,13 @@ if "dati_mappati" in st.session_state:
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara e caricamento sul Cloud..."):
+        with st.spinner("Generazione del foglio di gara e caricamento su Google Drive..."):
             try:
-                import requests  # Importiamo requests per l'invio al cloud
-                
+                import datetime
+                from google.oauth2 import service_account
+                from googleapiclient.discovery import build
+                from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
@@ -165,24 +168,46 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # 1. Generiamo una prima versione del PDF temporanea (senza QR o con QR finto) per avere i dati pronti
-                pdf_temporaneo = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
+                # 1. Autenticazione con Google Drive tramite Secrets
+                creds_dict = st.secrets["google_credentials"]
+                folder_id = st.secrets.get("DRIVE_FOLDER_ID")
                 
-                # 2. Carichiamo il file temporaneo su File.io per ottenere un link di condivisione unico
-                # Nota: File.io di base cancella i file dopo il primo download. Se vuoi un archivio permanente, 
-                # puoi usare l'API di un tuo account Dropbox/Drive o servizi come Catbox.moe
-                files = {'file': ('distinta_ufficiale.pdf', pdf_temporaneo, 'application/pdf')}
-                response_cloud = requests.post('https://file.io', files=files)
+                if not creds_dict or not folder_id:
+                    st.error("Credenziali Google o DRIVE_FOLDER_ID non trovati nei configuratori secrets!")
+                    st.stop()
+                    
+                creds = service_account.Credentials.from_service_account_info(creds_dict)
+                drive_service = build('drive', 'v3', credentials=creds)
                 
-                if response_cloud.status_code == 200:
-                    pdf_url = response_cloud.json().get("link")
-                    st.toast(f"Link generato con successo!", icon="☁️")
-                else:
-                    # Fallback sul link dell'app in caso di errore di rete
-                    pdf_url = "https://streamlit.app"
-                    st.warning("Impossibile caricare sul Cloud, il QR rimanderà alla pagina principale dell'app.")
+                # Nome del file unico basato sul tempo
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                nome_societa = pulisci_testo(edit_nome_casa).replace(" ", "_")
+                nome_file_pdf = f"distinta_{nome_societa}_{timestamp}.pdf"
 
-                # 3. Generiamo il QR Code REALE che punta al link del PDF appena caricato
+                # 2. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
+                pdf_temporaneo_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
+                
+                # 3. Primo caricamento del file grezzo su Google Drive per assicurarci un ID file univoco
+                file_metadata = {
+                    'name': nome_file_pdf,
+                    'parents': [folder_id]
+                }
+                media = MediaIoBaseUpload(io.BytesIO(pdf_temporaneo_bytes), mimetype='application/pdf', resumable=True)
+                file_drive = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+                file_id = file_drive.get('id')
+                
+                # 4. Cambiamo i permessi del file per renderlo leggibile a chiunque abbia il link (necessario per il QR Code)
+                permission_metadata = {
+                    'type': 'anyone',
+                    'role': 'reader'
+                }
+                drive_service.permissions().create(fileId=file_id, body=permission_metadata).execute()
+                
+                # 5. Costruiamo il link diretto per la visualizzazione/anteprima immediata del PDF su Smartphone
+                # Rispetto al classico 'view', l'endpoint 'uc?id=' forza la visualizzazione pulita senza l'interfaccia di Drive
+                pdf_url = f"https://google.com{file_id}"
+                
+                # 6. Generiamo il QR Code reale associato a questo indirizzo di Google Drive
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -191,11 +216,17 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # 4. Rigeneriamo il PDF definitivo includendo il QR Code corretto
-                pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
-                st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.session_state["pdf_url_condiviso"] = pdf_url # Salviamo il link per mostrarlo all'utente
-                st.success("🎉 Documento A4 unificato e QR Code dinamico generati!")
+                # 7. Rigeneriamo il PDF completo includendo il QR Code stampato sopra
+                pdf_finale_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
+                
+                # 8. Aggiorniamo il file precedentemente creato su Google Drive inserendo la versione con il QR Code funzionante
+                media_aggiornato = MediaIoBaseUpload(io.BytesIO(pdf_finale_bytes), mimetype='application/pdf', resumable=True)
+                drive_service.files().update(fileId=file_id, media_body=media_aggiornato).execute()
+                
+                # Salvataggio nello stato dell'applicazione
+                st.session_state["pdf_interattivo_pronto"] = pdf_finale_bytes
+                st.session_state["pdf_url_condiviso"] = pdf_url
+                st.success("🎉 Distinta salvata su Google Drive e QR Code sincronizzato!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
