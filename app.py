@@ -39,18 +39,28 @@ if file_casa and file_ospite:
                     casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                     ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
+                    # 1. Sovrascriviamo le griglie con i nuovi giocatori estratti
                     st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
                     st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
                     
-                    # CONTROLLO CRITICO: Verifichiamo che casa legga casa_raw e ospite legga ospite_raw
+                    # 2. Aggiorniamo le macro informazioni generali del match
                     st.session_state["macro_info"] = {
                         "campionato": casa_raw["campionato"], 
                         "data": casa_raw["data"], 
                         "squadra_casa": casa_raw["squadra"], 
                         "all_casa": casa_raw["allenatore"], 
-                        "squadra_ospite": ospite_raw["squadra"], # Deve essere ospite_raw!
-                        "all_ospite": ospite_raw["allenatore"]   # Deve essere ospite_raw!
+                        "squadra_ospite": ospite_raw["squadra"], 
+                        "all_ospite": ospite_raw["allenatore"]
                     }
+                    
+                    # --- CORREZIONE CRITICA CONTRO IL BLOCCO DEI DATI ---
+                    # Eliminiamo i vecchi stati dei widget di testo per costringere Streamlit
+                    # a ricaricare a schermo i nuovi nomi appena estratti dall'AI
+                    chiavi_da_resettare = ["editor_casa_current", "editor_ospite_current"]
+                    for chiave in chiavi_da_resettare:
+                        if chiave in st.session_state:
+                            st.session_state.pop(chiave)
+                    
                     st.session_state["dati_mappati"] = True
                     st.rerun()
                 except Exception as e:
