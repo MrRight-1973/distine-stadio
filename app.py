@@ -182,3 +182,27 @@ if "dati_mappati" in st.session_state:
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
+
+# --- VISUALIZZAZIONE PULSANTI DI DOWNLOAD DIRETTO ---
+if "pdf_interattivo_pronto" in st.session_state:
+    st.write("")
+    st.markdown("### 💾 Scarica il Documento Compilato")
+    
+    c_dl1, c_dl2 = st.columns(2)
+    with c_dl1:
+        st.download_button(
+            label="💻 Scarica PDF per il Computer",
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    with c_dl2:
+        st.download_button(
+            label="📱 Scarica PDF su Smartphone",
+            data=st.session_state["pdf_interattivo_pronto"],
+            file_name="distinta_ufficiale_A4_mobile.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
