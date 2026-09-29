@@ -143,12 +143,12 @@ if "dati_mappati" in st.session_state:
         with st.spinner("Generazione del foglio di gara e caricamento su Google Drive..."):
             try:
                 import datetime
+                import time
                 import requests
                 import json
                 import io
                 import qrcode
-                from google.oauth2 import service_account
-                import google.auth.transport.requests
+                import jwt  # Utilizza PyJWT per la firma nativa senza SDK Google
 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -174,39 +174,40 @@ if "dati_mappati" in st.session_state:
                 # 1. Recupero parametri dai Secrets
                 folder_id = st.secrets.get("DRIVE_FOLDER_ID")
                 client_email = st.secrets.get("DRIVE_CLIENT_EMAIL")
-                project_id = st.secrets.get("DRIVE_PROJECT_ID")
                 private_key = st.secrets.get("DRIVE_PRIVATE_KEY")
                 
-                if not all([folder_id, client_email, project_id, private_key]):
+                if not all([folder_id, client_email, private_key]):
                     st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
 
-                # 2. Struttura del dizionario forzata con TUTTI gli endpoint richiesti per azzerare i fallback 404
-                info_creds = {
-                    "type": "service_account",
-                    "project_id": project_id,
-                    "private_key_id": "74446930d14900f6eab6bd3ff13bb44dcc9ec4c9",
-                    "private_key": private_key,
-                    "client_email": client_email,
-                    "client_id": "106839468953031910546",
-                    "auth_uri": "https://google.com",
-                    "token_uri": "https://googleapis.com",
-                    "auth_provider_x509_cert_url": "https://googleapis.com",
-                    "client_x509_cert_url": f"https://googleapis.com{client_email.replace('@', '%40')}"
+                # 2. Generazione del Token JWT firmato manualmente (Risolve il 404 all'origine)
+                iat = int(time.time())
+                exp = iat + 3600
+                payload = {
+                    'iss': client_email,
+                    'scope': 'https://googleapis.com',
+                    'aud': 'https://googleapis.com',
+                    'iat': iat,
+                    'exp': exp
                 }
                 
-                scopes = ['https://googleapis.com']
-                creds = service_account.Credentials.from_service_account_info(info_creds, scopes=scopes)
+                # Firmiamo il payload direttamente con PyJWT usando l'algoritmo RSA standard di Google (RS256)
+                jwt_firmato = jwt.encode(payload, private_key, algorithm='RS256')
                 
-                # Usiamo l'oggetto Request standard per validare e richiedere il token in sicurezza
-                richiesta_trasporto = google.auth.transport.requests.Request()
-                creds.refresh(richiesta_trasporto)
-                access_token = creds.token
+                # Richiesta dell'access token all'endpoint OAuth2 ufficiale di Google
+                r_token = requests.post(
+                    'https://googleapis.com',
+                    data={
+                        'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                        'assertion': jwt_firmato
+                    }
+                )
                 
-                if not access_token:
-                    st.error("Impossibile recuperare il token di accesso dai server di autenticazione Google.")
+                if r_token.status_code != 200:
+                    st.error(f"Errore di autenticazione OAuth2 su Google: {r_token.text}")
                     st.stop()
-                
+                    
+                access_token = r_token.json().get("access_token")
                 headers_auth = {"Authorization": f"Bearer {access_token}"}
 
                 # 3. Prepariamo i metadati del file unico
