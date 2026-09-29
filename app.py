@@ -5,10 +5,14 @@ import pandas as pd
 from estrattore import analizza_distinta
 from creatore_pdf import genera_pdf
 from utils import pulisci_testo
-
-# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE ---
 from pagine_web import mostra_pagina_formazione
-mostra_pagina_formazione() 
+
+st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
+
+# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE (BLINDATO) ---
+# Eseguiamo il controllo prima di caricare qualsiasi altro elemento grafico dell'interfaccia
+mostra_pagina_formazione()
+
 # Se l'utente ha scansionato il QR, questa funzione si attiva e mostra solo la formazione, ignorando il pannello di gestione.
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
