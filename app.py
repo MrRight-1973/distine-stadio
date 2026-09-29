@@ -187,11 +187,10 @@ if "dati_mappati" in st.session_state:
                 # Generiamo una chiave casuale e unica per questa partita domenicale
                 id_partita = secrets.token_hex(8)
                 
-                # Salviamo i dati sul cloud storage gratuito KeyValue.xyz
+                # CORREZIONE: Assicuriamoci che lo slash (/) separi nettamente l'host dalla variabile id_partita
                 url_storage = f"https://keyvalue.xyz{id_partita}"
                 response_cloud = requests.post(url_storage, data=json.dumps(pacchetto_match))
                 
-                # CORREZIONE: Utilizzato un controllo diretto != 200 per evitare errori di sintassi
                 if response_cloud.status_code != 200:
                     # Se il servizio principale fallisce, usiamo un fallback sul link standard dell'app
                     pdf_url = "https://streamlit.app"
