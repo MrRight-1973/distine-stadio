@@ -140,8 +140,10 @@ if "dati_mappati" in st.session_state:
     # --- GENERAZIONE PDF FINALE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 definitivo..."):
+        with st.spinner("Generazione del foglio di gara e caricamento sul Cloud..."):
             try:
+                import requests  # Importiamo requests per l'invio al cloud
+                
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
@@ -163,8 +165,24 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                pdf_url = "https://streamlit.app"
+                # 1. Generiamo una prima versione del PDF temporanea (senza QR o con QR finto) per avere i dati pronti
+                pdf_temporaneo = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
+                # 2. Carichiamo il file temporaneo su File.io per ottenere un link di condivisione unico
+                # Nota: File.io di base cancella i file dopo il primo download. Se vuoi un archivio permanente, 
+                # puoi usare l'API di un tuo account Dropbox/Drive o servizi come Catbox.moe
+                files = {'file': ('distinta_ufficiale.pdf', pdf_temporaneo, 'application/pdf')}
+                response_cloud = requests.post('https://file.io', files=files)
+                
+                if response_cloud.status_code == 200:
+                    pdf_url = response_cloud.json().get("link")
+                    st.toast(f"Link generato con successo!", icon="☁️")
+                else:
+                    # Fallback sul link dell'app in caso di errore di rete
+                    pdf_url = "https://streamlit.app"
+                    st.warning("Impossibile caricare sul Cloud, il QR rimanderà alla pagina principale dell'app.")
+
+                # 3. Generiamo il QR Code REALE che punta al link del PDF appena caricato
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -173,30 +191,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
+                # 4. Rigeneriamo il PDF definitivo includendo il QR Code corretto
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.success("🎉 Documento A4 unificato e QR Code stampato generati!")
+                st.session_state["pdf_url_condiviso"] = pdf_url # Salviamo il link per mostrarlo all'utente
+                st.success("🎉 Documento A4 unificato e QR Code dinamico generati!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
-
-if "pdf_interattivo_pronto" in st.session_state:
-    st.write("")
-    c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="💾 Scarica PDF per il Computer",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📥 Scarica PDF su Smartphone",
-            data=st.session_state["pdf_interattivo_pronto"],
-            file_name="distinta_ufficiale_A4_mobile.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
