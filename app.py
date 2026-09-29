@@ -154,13 +154,14 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE CON CLOUD STORAGE PER SMARTPHONE (DPASTE) ---
+    # --- GENERAZIONE PDF FINALE CON MULTIPART QR AUTO-CONTENUTO (ZERO CLOUD) ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Salvataggio della formazione online e ottimizzazione QR..."):
+        with st.spinner("Compressione dati e generazione QR Code autonomo..."):
             try:
                 import json
-                import requests
+                import base64
+                import zlib
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -183,38 +184,27 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Filtriamo le righe vuote dei giocatori per la massima efficienza
-                lista_casa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
-                lista_ospite = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
+                # Filtriamo in modo aggressivo per convertire TUTTO in stringhe e togliere le righe vuote
+                lista_casa_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
+                lista_ospite_micro = [[str(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
                 
-                pacchetto_match = {
-                    "info": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
-                    "casa": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa],
-                    "ospite": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite]
+                # Creiamo una struttura a liste indicizzate compatta (nessuna parola chiave ripetuta)
+                pacchetto_super_micro = {
+                    "i": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
+                    "c": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa_micro],
+                    "o": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite_micro]
                 }
                 
-                # Inviamo i dati a Dpaste (scadenza impostata a 30 giorni)
-                response_cloud = requests.post(
-                    'https://dpaste.org',
-                    data={
-                        'content': json.dumps(pacchetto_match),
-                        'expiry_days': 30
-                    }
-                )
+                # Compressione binaria zlib ad alta densità + conversione in stringa testuale URL-Safe
+                testo_json = json.dumps(pacchetto_super_micro)
+                dati_compressi = zlib.compress(testo_json.encode('utf-8'), level=9) # Massimo livello di compressione
+                stringa_qr = base64.urlsafe_b64encode(dati_compressi).decode('utf-8')
                 
-                if response_cloud.status_code != 200:
-                    pdf_url = "https://streamlit.app"
-                    st.warning("Servizio cloud temporaneamente occupato. Il QR rimanderà alla pagina principale.")
-                else:
-                    # Dpaste restituisce un link intero tipo 'https://dpaste.org'. Estraiamo solo il codice finale.
-                    link_grezzo = response_cloud.text.strip().replace('"', '')
-                    id_partita = link_grezzo.split('/')[-1] if '/' in link_grezzo else link_grezzo
-                    
-                    # URL ULTRA CORTO per la tua applicazione Streamlit
-                    pdf_url = f"https://streamlit.app?match={id_partita}"
+                # L'intero foglio di gara è contenuto matematicamente dentro a questo link!
+                pdf_url = f"https://streamlit.app{stringa_qr}"
                 
-                # Generazione fisica del QR Code leggero
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+                # Configurazione QR Code ottimizzata per dati densi (Livello L per minimizzare i quadratini)
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=2)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
                 img_qr = qr.make_image(fill_color="black", back_color="white")
@@ -222,11 +212,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione della distinta PDF finale da stampare
+                # Generazione fisica della distinta PDF A4 per la terna arbitrale
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.session_state["ultimo_qr_link"] = pdf_url
-                st.success("🎉 Distinta unificata e QR Code per smartphone generati con successo!")
+                st.success("🎉 Distinta A4 unificata e QR Code auto-contenuto generati!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
