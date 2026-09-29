@@ -2,20 +2,37 @@ import streamlit as st
 import json
 import base64
 
-import streamlit as st
-import json
-import base64
-
 def mostra_pagina_formazione():
     """Mostra una splendida pagina web ottimizzata per smartphone se rileva i dati nell'URL"""
-    # CORREZIONE: Aggiunte le parentesi tonde () per richiamare correttamente la funzione di Streamlit
-    params = st.query_parameters() 
     
+    # STRATEGIA DI RECUPERO UNIVERSALE: Prova prima il metodo moderno, poi il dizionario, poi la versione sperimentale
+    params = {}
+    try:
+        if hasattr(st, "query_parameters"):
+            # Gestione come dizionario o come callable a seconda della versione esatta di Streamlit
+            if callable(st.query_parameters):
+                params = st.query_parameters()
+            else:
+                params = st.query_parameters
+        else:
+            params = st.experimental_get_query_params()
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+        except Exception:
+            params = {}
+
+    # Estraiamo il valore del parametro 'match' gestendo sia il formato stringa che il formato lista (vecchio formato query)
+    match_param = None
     if "match" in params:
+        valore = params["match"]
+        match_param = valore[0] if isinstance(valore, list) else valore
+    
+    if match_param:
         try:
             # 1. Decodifichiamo i dati compressi passati dal QR Code
-            dati_compressi = params["match"]
-
+            dati_json = base64.b64decode(match_param).decode('utf-8')
+            match_data = json.loads(dati_json)
             
             # --- STILE GRAFICO AZZURRA DUE CARRARE ---
             st.markdown("""
@@ -43,23 +60,23 @@ def mostra_pagina_formazione():
                 st.markdown(f'<div class="card-team"><p class="team-name">🏠 {match_data["casa"]["squadra"]}</p>'
                             f'<p class="all-name"><b>All:</b> {match_data["casa"]["allenatore"]}</p></div>', unsafe_allow_html=True)
                 for g in match_data["casa"]["giocatori"]:
-                    if g["GIOCATORE"]: # Mostra solo le righe compilate
-                        st.markdown(f'<div class="player-row"><div class="player-num">{g["N°"]}</div>'
-                                    f'<div class="player-name">{g["GIOCATORE"]}</div>'
-                                    f'<div class="player-year">{g["ANNO"]}</div></div>', unsafe_allow_html=True)
+                    if g.get("GIOCATORE"): # Mostra solo le righe compilate
+                        st.markdown(f'<div class="player-row"><div class="player-num">{g.get("N°")}</div>'
+                                    f'<div class="player-name">{g.get("GIOCATORE")}</div>'
+                                    f'<div class="player-year">{g.get("ANNO")}</div></div>', unsafe_allow_html=True)
             
             # 4. Colonna Squadra Ospite
             with col2:
                 st.markdown(f'<div class="card-team"><p class="team-name">🚀 {match_data["ospite"]["squadra"]}</p>'
                             f'<p class="all-name"><b>All:</b> {match_data["ospite"]["allenatore"]}</p></div>', unsafe_allow_html=True)
                 for g in match_data["ospite"]["giocatori"]:
-                    if g["GIOCATORE"]:
-                        st.markdown(f'<div class="player-row"><div class="player-num">{g["N°"]}</div>'
-                                    f'<div class="player-name">{g["GIOCATORE"]}</div>'
-                                    f'<div class="player-year">{g["ANNO"]}</div></div>', unsafe_allow_html=True)
+                    if g.get("GIOCATORE"):
+                        st.markdown(f'<div class="player-row"><div class="player-num">{g.get("N°")}</div>'
+                                    f'<div class="player-name">{g.get("GIOCATORE")}</div>'
+                                    f'<div class="player-year">{g.get("ANNO")}</div></div>', unsafe_allow_html=True)
                         
             st.markdown("---")
-            st.caption(f"🏁 Arbitro: {match_data['info']['arbitro']} | Assistenti: {match_data['info']['assistente1']} - {match_data['info']['assistente2']}")
-            st.stop() # Blocca il resto del caricamento per mostrare SOLO la formazione
+            st.caption(f"🏁 Arbitro: {match_data['info'].get('arbitro', '')} | Assistenti: {match_data['info'].get('assistente1', '')} - {match_data['info'].get('assistente2', '')}")
+            st.stop() # Blocca l'applicazione mostrando esclusivamente lo schermo per il telefono
         except Exception as e:
             st.error("Impossibile caricare i dati della formazione. Il link potrebbe essere corrotto.")
