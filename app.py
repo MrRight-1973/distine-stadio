@@ -168,7 +168,7 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # 1. Ricostruzione dinamica delle credenziali per evitare URL corrotti nei Secrets
+                # 1. Recupero parametri dai Secrets
                 folder_id = st.secrets.get("DRIVE_FOLDER_ID")
                 client_email = st.secrets.get("DRIVE_CLIENT_EMAIL")
                 project_id = st.secrets.get("DRIVE_PROJECT_ID")
@@ -178,7 +178,6 @@ if "dati_mappati" in st.session_state:
                     st.error("Configurazione dei parametri di Drive incompleta nei Secrets!")
                     st.stop()
                 
-                # Ricostruiamo la struttura JSON standard attesa da Google
                 info_creds = {
                     "type": "service_account",
                     "project_id": project_id,
@@ -188,7 +187,9 @@ if "dati_mappati" in st.session_state:
                 }
                 
                 creds = service_account.Credentials.from_service_account_info(info_creds)
-                drive_service = build('drive', 'v3', credentials=creds)
+                
+                # CORREZIONE CRITICA: static_discovery=False impedisce a Google di fare la chiamata HTTP che generava l'errore 404
+                drive_service = build('drive', 'v3', credentials=creds, static_discovery=False)
                 
                 # Nome del file unico basato sul tempo
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -198,7 +199,7 @@ if "dati_mappati" in st.session_state:
                 # 2. Generiamo il PDF temporaneo iniziale (senza QR definitivo)
                 pdf_temporaneo_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_code_bytes=None)
                 
-                # 3. Primo caricamento del file grezzo su Google Drive per assicurarci un ID file univoco
+                # 3. Primo caricamento del file grezzo su Google Drive
                 file_metadata = {
                     'name': nome_file_pdf,
                     'parents': [folder_id]
@@ -207,17 +208,17 @@ if "dati_mappati" in st.session_state:
                 file_drive = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
                 file_id = file_drive.get('id')
                 
-                # 4. Cambiamo i permessi del file per renderlo leggibile a chiunque abbia il link (necessario per il QR Code)
+                # 4. Cambiamo i permessi del file per renderlo pubblico (necessario per far funzionare il QR Code)
                 permission_metadata = {
                     'type': 'anyone',
                     'role': 'reader'
                 }
                 drive_service.permissions().create(fileId=file_id, body=permission_metadata).execute()
                 
-                # 5. Costruiamo il link diretto per la visualizzazione/anteprima immediata del PDF su Smartphone
+                # 5. Costruiamo il link diretto per la visualizzazione pulita del PDF da smartphone
                 pdf_url = f"https://google.com{file_id}"
                 
-                # 6. Generiamo il QR Code reale associato a questo indirizzo di Google Drive
+                # 6. Generiamo il QR Code reale associato all'ID del file di Drive
                 qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -229,7 +230,7 @@ if "dati_mappati" in st.session_state:
                 # 7. Rigeneriamo il PDF completo includendo il QR Code stampato sopra
                 pdf_finale_bytes = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 
-                # 8. Aggiorniamo il file precedentemente creato su Google Drive inserendo la versione con il QR Code funzionante
+                # 8. Aggiorniamo il file su Google Drive inserendo la versione definitiva con il QR funzionante
                 media_aggiornato = MediaIoBaseUpload(io.BytesIO(pdf_finale_bytes), mimetype='application/pdf', resumable=True)
                 drive_service.files().update(fileId=file_id, media_body=media_aggiornato).execute()
                 
