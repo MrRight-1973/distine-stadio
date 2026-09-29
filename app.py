@@ -144,13 +144,14 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE CON QR CODE DINAMICO ---
+    # --- GENERAZIONE PDF FINALE CON QR CODE DINAMICO AD ALTA COMPRESSIONE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 definitivo..."):
+        with st.spinner("Generazione del foglio di gara A4 e ottimizzazione QR..."):
             try:
                 import json
                 import base64
+                import zlib  # Utilizziamo la compressione zlib per dimezzare la lunghezza del testo
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -173,23 +174,27 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Compattiamo i dati del match in un pacchetto unico
-                pacchetto_match = {
-                    "info": info_gara_corrette,
-                    "casa": {"squadra": squadra_casa_corretta["squadra"], "allenatore": squadra_casa_corretta["allenatore"], "giocatori": squadra_casa_corretta["giocatori"]},
-                    "ospite": {"squadra": squadra_ospite_corretta["squadra"], "allenatore": squadra_ospite_corretta["allenatore"], "giocatori": squadra_ospite_corretta["giocatori"]}
+                # --- STRATEGIA DI COMPRESSIONE ESTREMA PER EVITARE L'ERRORE VERSION 41 ---
+                # Riduciamo i nomi delle chiavi a un solo carattere ed escludiamo le righe vuote dei giocatori
+                lista_casa_compressa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if g["GIOCATORE"].strip() != ""]
+                lista_ospite_compressa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if g["GIOCATORE"].strip() != ""]
+                
+                pacchetto_micro = {
+                    "i": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
+                    "c": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa_compressa],
+                    "o": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite_compressa]
                 }
                 
-                # Trasformiamo i dati in stringa crittografata/compressa URL-Safe
-                stringa_json = json.dumps(pacchetto_match)
-                dati_codificati = base64.b64encode(stringa_json.encode('utf-8')).decode('utf-8')
+                # Applichiamo compressione binaria zlib + codifica base64 adatta agli URL
+                stringa_json = json.dumps(pacchetto_micro)
+                dati_compressi_zlib = zlib.compress(stringa_json.encode('utf-8'))
+                dati_codificati = base64.urlsafe_b64encode(dati_compressi_zlib).decode('utf-8')
                 
-                # CREAZIONE URL REALE PER IL QR CODE
-                # Quando viene scansionato, rimanda alla tua app passando l'intero blocco dati
+                # Generazione dell'URL finale ultra-corto
                 pdf_url = f"https://streamlit.app{dati_codificati}"
                 
-                # Generazione fisica del QR Code
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+                # CONFIGURAZIONE QR CODE DINAMICA: version=None permette l'auto-adattamento ottimale (da 1 a 40)
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
                 img_qr = qr.make_image(fill_color="black", back_color="white")
@@ -197,10 +202,10 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione del PDF cartaceo
+                # Generazione del PDF cartaceo finale per lo stadio
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
-                st.session_state["ultimo_qr_link"] = pdf_url # Salviamo il link per l'anteprima
+                st.session_state["ultimo_qr_link"] = pdf_url
                 st.success("🎉 Distinta A4 e Pagina Mobile collegate con successo!")
                 
             except Exception as ex:
