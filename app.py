@@ -36,13 +36,15 @@ if file_casa and file_ospite:
                     
                     st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
                     st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
+                    
+                    # CONTROLLO CRITICO: Verifichiamo che casa legga casa_raw e ospite legga ospite_raw
                     st.session_state["macro_info"] = {
                         "campionato": casa_raw["campionato"], 
                         "data": casa_raw["data"], 
                         "squadra_casa": casa_raw["squadra"], 
                         "all_casa": casa_raw["allenatore"], 
-                        "squadra_ospite": ospite_raw["squadra"], 
-                        "all_ospite": ospite_raw["allenatore"]
+                        "squadra_ospite": ospite_raw["squadra"], # Deve essere ospite_raw!
+                        "all_ospite": ospite_raw["allenatore"]   # Deve essere ospite_raw!
                     }
                     st.session_state["dati_mappati"] = True
                     st.rerun()
