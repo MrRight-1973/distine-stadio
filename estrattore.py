@@ -8,12 +8,15 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
+    # PROMPT OTTIMIZZATO: Specifichiamo all'AI di concentrarsi SOLO sul ruolo richiesto (CASA o OSPITE)
     prompt_sistema = (
-        "Sei un assistente esperto di calcio LND. Il tuo compito è scansionare la griglia dei calciatori. "
+        f"Sei un assistente esperto di calcio LND. Il tuo compito attuale è scansionare la distinta della SQUADRA {ruolo_squadra}.\n"
+        f"ATTENZIONE CRITICA: Devi estrarre esclusivamente il nome della società e dell'allenatore relativi alla squadra che gioca in {ruolo_squadra}. "
+        "Non confonderla con la squadra avversaria eventualmente menzionata nell'intestazione del foglio.\n\n"
         "Rispondi ESCLUSIVAMENTE con un blocco json avente questa esatta struttura:\n"
         "{\n"
-        "  \"squadra\": \"Nome Squadra\",\n"
-        "  \"allenatore\": \"Cognome Nome\",\n"
+        "  \"squadra\": \"Nome Squadra " + ruolo_squadra + "\",\n"
+        "  \"allenatore\": \"Cognome Nome Allenatore\",\n"
         "  \"data\": \"DD/MM/YYYY\",\n"
         "  \"campionato\": \"Nome Campionato\",\n"
         "  \"giocatori\": [\n"
@@ -30,12 +33,12 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai l'elenco dei giocatori per la squadra {ruolo_squadra} in formato json."},
+                    {"type": "text", "text": f"Estrai l'elenco dei giocatori, il nome esatto della squadra e l'allenatore per la squadra con ruolo {ruolo_squadra} in formato json."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
         ],
-        temperature=0.0
+        temperature=0.0  # Mantenuto a 0.0 per la massima precisione e determinismo
     )
     
     risultato_grezzo = response.choices[0].message.content.strip()
