@@ -144,14 +144,13 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE CON CLOUD STORAGE PER SMARTPHONE ---
+    # --- GENERAZIONE PDF FINALE CON CLOUD STORAGE PER SMARTPHONE (DPASTE) ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
         with st.spinner("Salvataggio della formazione online e ottimizzazione QR..."):
             try:
                 import json
                 import requests
-                import secrets  # Per generare una chiave unica per la partita
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -174,7 +173,7 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Filtriamo le righe vuote per risparmiare spazio nel database cloud
+                # Filtriamo le righe vuote dei giocatori per la massima efficienza
                 lista_casa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
                 lista_ospite = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
                 
@@ -184,19 +183,24 @@ if "dati_mappati" in st.session_state:
                     "ospite": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite]
                 }
                 
-                # Generiamo una chiave casuale e unica per questa partita domenicale
-                id_partita = secrets.token_hex(8)
-                
-                # CORREZIONE: Assicuriamoci che lo slash (/) separi nettamente l'host dalla variabile id_partita
-                url_storage = f"https://keyvalue.xyz{id_partita}"
-                response_cloud = requests.post(url_storage, data=json.dumps(pacchetto_match))
+                # Inviamo i dati a Dpaste (scadenza impostata a 30 giorni)
+                response_cloud = requests.post(
+                    'https://dpaste.org',
+                    data={
+                        'content': json.dumps(pacchetto_match),
+                        'expiry_days': 30
+                    }
+                )
                 
                 if response_cloud.status_code != 200:
-                    # Se il servizio principale fallisce, usiamo un fallback sul link standard dell'app
                     pdf_url = "https://streamlit.app"
-                    st.warning("Servizio cloud temporaneamente occupato. Il QR rimanderà alla pagina di gestione.")
+                    st.warning("Servizio cloud temporaneamente occupato. Il QR rimanderà alla pagina principale.")
                 else:
-                    # CREAZIONE URL ULTRA CORTO (Perfetto per i telefoni, non si interrompe mai!)
+                    # Dpaste restituisce un link intero tipo 'https://dpaste.org'. Estraiamo solo il codice finale.
+                    link_grezzo = response_cloud.text.strip().replace('"', '')
+                    id_partita = link_grezzo.split('/')[-1] if '/' in link_grezzo else link_grezzo
+                    
+                    # URL ULTRA CORTO per la tua applicazione Streamlit
                     pdf_url = f"https://streamlit.app?match={id_partita}"
                 
                 # Generazione fisica del QR Code leggero
@@ -208,11 +212,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione del PDF da stampare
+                # Generazione della distinta PDF finale da stampare
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.session_state["ultimo_qr_link"] = pdf_url
-                st.success("🎉 Distinta unificata e QR Code cortissimo generati!")
+                st.success("🎉 Distinta unificata e QR Code per smartphone generati con successo!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
