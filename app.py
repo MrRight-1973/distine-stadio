@@ -151,7 +151,7 @@ if "dati_mappati" in st.session_state:
             try:
                 import json
                 import base64
-                import zlib  # Utilizziamo la compressione zlib per dimezzare la lunghezza del testo
+                import zlib
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -174,26 +174,26 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # --- STRATEGIA DI COMPRESSIONE ESTREMA PER EVITARE L'ERRORE VERSION 41 ---
-                # Riduciamo i nomi delle chiavi a un solo carattere ed escludiamo le righe vuote dei giocatori
-                lista_casa_compressa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if g["GIOCATORE"].strip() != ""]
-                lista_ospite_compressa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if g["GIOCATORE"].strip() != ""]
+                # Compressione rigida: prendiamo solo numero, nome e anno (escludiamo righe vuote)
+                lista_casa_compressa = [[int(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
+                lista_ospite_compressa = [[int(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
                 
+                # Creazione del pacchetto super-leggero a liste ordinate
                 pacchetto_micro = {
                     "i": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
                     "c": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa_compressa],
                     "o": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite_compressa]
                 }
                 
-                # Applichiamo compressione binaria zlib + codifica base64 adatta agli URL
+                # Compressione zlib + codifica base64 URL-safe obbligatoria
                 stringa_json = json.dumps(pacchetto_micro)
                 dati_compressi_zlib = zlib.compress(stringa_json.encode('utf-8'))
                 dati_codificati = base64.urlsafe_b64encode(dati_compressi_zlib).decode('utf-8')
                 
-                # Generazione dell'URL finale ultra-corto
+                # Costruzione URL definitivo dell'applicazione
                 pdf_url = f"https://streamlit.app{dati_codificati}"
                 
-                # CONFIGURAZIONE QR CODE DINAMICA: version=None permette l'auto-adattamento ottimale (da 1 a 40)
+                # Generazione fisica del QR Code
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
@@ -202,7 +202,7 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione del PDF cartaceo finale per lo stadio
+                # Generazione della distinta PDF da stampare
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.session_state["ultimo_qr_link"] = pdf_url
