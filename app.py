@@ -144,14 +144,14 @@ if "dati_mappati" in st.session_state:
                     st.session_state["griglia_ospite"] = df_nuovo.set_index("N°")
                     st.rerun()
 
-    # --- GENERAZIONE PDF FINALE CON QR CODE DINAMICO AD ALTA COMPRESSIONE ---
+    # --- GENERAZIONE PDF FINALE CON CLOUD STORAGE PER SMARTPHONE ---
     st.markdown("---")
     if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del foglio di gara A4 e ottimizzazione QR..."):
+        with st.spinner("Salvataggio della formazione online e ottimizzazione QR..."):
             try:
                 import json
-                import base64
-                import zlib
+                import requests
+                import secrets  # Per generare una chiave unica per la partita
                 
                 giocatori_casa_salvati = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 giocatori_ospite_salvati = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -174,27 +174,33 @@ if "dati_mappati" in st.session_state:
                     "assistente2": pulisci_testo(edit_ass2)
                 }
                 
-                # Compressione rigida: prendiamo solo numero, nome e anno (escludiamo righe vuote)
-                lista_casa_compressa = [[int(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
-                lista_ospite_compressa = [[int(g["N°"]), str(g["GIOCATORE"]), str(g["ANNO"])] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
+                # Filtriamo le righe vuote per risparmiare spazio nel database cloud
+                lista_casa = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_casa_salvati if str(g["GIOCATORE"]).strip() != ""]
+                lista_ospite = [[g["N°"], g["GIOCATORE"], g["ANNO"]] for g in giocatori_ospite_salvati if str(g["GIOCATORE"]).strip() != ""]
                 
-                # Creazione del pacchetto super-leggero a liste ordinate
-                pacchetto_micro = {
-                    "i": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
-                    "c": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa_compressa],
-                    "o": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite_compressa]
+                pacchetto_match = {
+                    "info": [info_gara_corrette["campionato"], info_gara_corrette["data"], info_gara_corrette["arbitro"], info_gara_corrette["assistente1"], info_gara_corrette["assistente2"]],
+                    "casa": [squadra_casa_corretta["squadra"], squadra_casa_corretta["allenatore"], lista_casa],
+                    "ospite": [squadra_ospite_corretta["squadra"], squadra_ospite_corretta["allenatore"], lista_ospite]
                 }
                 
-                # Compressione zlib + codifica base64 URL-safe obbligatoria
-                stringa_json = json.dumps(pacchetto_micro)
-                dati_compressi_zlib = zlib.compress(stringa_json.encode('utf-8'))
-                dati_codificati = base64.urlsafe_b64encode(dati_compressi_zlib).decode('utf-8')
+                # Generiamo una chiave casuale e unica per questa partita domenicale
+                id_partita = secrets.token_hex(8)
                 
-                # Costruzione URL definitivo dell'applicazione
-                pdf_url = f"https://streamlit.app{dati_codificati}"
+                # Salviamo i dati sul cloud storage gratuito KeyValue.xyz
+                url_storage = f"https://keyvalue.xyz{id_partita}"
+                response_cloud = requests.post(url_storage, data=json.dumps(pacchetto_match))
                 
-                # Generazione fisica del QR Code
-                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+                if response_cloud.status_code not in:
+                    # Se il servizio principale fallisce, usiamo un fallback sul link standard dell'app
+                    pdf_url = "https://streamlit.app"
+                    st.warning("Servizio cloud temporaneamente occupato. Il QR rimanderà alla pagina di gestione.")
+                else:
+                    # CREAZIONE URL ULTRA CORTO (Perfetto per i telefoni, non si interrompe mai!)
+                    pdf_url = f"https://streamlit.app?match={id_partita}"
+                
+                # Generazione fisica del QR Code leggero
+                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
                 qr.add_data(pdf_url)
                 qr.make(fit=True)
                 img_qr = qr.make_image(fill_color="black", back_color="white")
@@ -202,11 +208,11 @@ if "dati_mappati" in st.session_state:
                 img_qr.save(buf_qr, format="PNG")
                 qr_bytes = buf_qr.getvalue()
                 
-                # Generazione della distinta PDF da stampare
+                # Generazione del PDF da stampare
                 pdf_finale = genera_pdf(squadra_casa_corretta, squadra_ospite_corretta, info_gara_corrette, qr_bytes)
                 st.session_state["pdf_interattivo_pronto"] = pdf_finale
                 st.session_state["ultimo_qr_link"] = pdf_url
-                st.success("🎉 Distinta A4 e Pagina Mobile collegate con successo!")
+                st.success("🎉 Distinta unificata e QR Code cortissimo generati!")
                 
             except Exception as ex:
                 st.error(f"Si è verificato un errore durante la compilazione finale: {ex}")
