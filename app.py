@@ -1,3 +1,8 @@
+# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE ---
+from pagine_web import mostra_pagina_formazione
+mostra_pagina_formazione() 
+# Se l'utente ha scansionato il QR, questa funzione si attiva e mostra solo la formazione, ignorando il pannello di gestione.
+
 import streamlit as st
 import io
 import qrcode
