@@ -1,28 +1,20 @@
 import streamlit as st
 import json
 import base64
+import zlib
 
 def mostra_pagina_formazione():
-    """Mostra una splendida pagina web ottimizzata per smartphone se rileva i dati nell'URL"""
-    
-    # STRATEGIA DI RECUPERO UNIVERSALE: Prova prima il metodo moderno, poi il dizionario, poi la versione sperimentale
+    """Mostra una splendida pagina web ottimizzata per smartphone decodificando i dati compressi"""
     params = {}
     try:
         if hasattr(st, "query_parameters"):
-            # Gestione come dizionario o come callable a seconda della versione esatta di Streamlit
-            if callable(st.query_parameters):
-                params = st.query_parameters()
-            else:
-                params = st.query_parameters
-        else:
-            params = st.experimental_get_query_params()
+            if callable(st.query_parameters): params = st.query_parameters()
+            else: params = st.query_parameters
+        else: params = st.experimental_get_query_params()
     except Exception:
-        try:
-            params = st.experimental_get_query_params()
-        except Exception:
-            params = {}
+        try: params = st.experimental_get_query_params()
+        except Exception: params = {}
 
-    # Estraiamo il valore del parametro 'match' gestendo sia il formato stringa che il formato lista (vecchio formato query)
     match_param = None
     if "match" in params:
         valore = params["match"]
@@ -30,9 +22,15 @@ def mostra_pagina_formazione():
     
     if match_param:
         try:
-            # 1. Decodifichiamo i dati compressi passati dal QR Code
-            dati_json = base64.b64decode(match_param).decode('utf-8')
-            match_data = json.loads(dati_json)
+            # DECOMPRESSIONE DEI DATI ULTRASHORT
+            dati_binari = base64.urlsafe_b64decode(match_param)
+            stringa_json = zlib.decompress(dati_binari).decode('utf-8')
+            pacchetto_micro = json.loads(stringa_json)
+            
+            # Ricostruiamo la struttura leggibile per l'interfaccia grafica mobile
+            info = pacchetto_micro["i"]
+            casa = pacchetto_micro["c"]
+            ospite = pacchetto_micro["o"]
             
             # --- STILE GRAFICO AZZURRA DUE CARRARE ---
             st.markdown("""
@@ -49,34 +47,32 @@ def mostra_pagina_formazione():
                 </style>
             """, unsafe_allow_html=True)
             
-            # 2. Intestazione della pagina
+            # Intestazione della pagina
             st.markdown('<p class="main-title">⚽ FORMAZIONI DI GARA LND</p>', unsafe_allow_html=True)
-            st.markdown(f'<p class="sub-title">🏆 {match_data["info"]["campionato"]} | 📅 {match_data["info"]["data"]}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="sub-title">🏆 {info[0]} | 📅 {info[1]}</p>', unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
             
-            # 3. Colonna Squadra in Casa
+            # Squadra in Casa
             with col1:
-                st.markdown(f'<div class="card-team"><p class="team-name">🏠 {match_data["casa"]["squadra"]}</p>'
-                            f'<p class="all-name"><b>All:</b> {match_data["casa"]["allenatore"]}</p></div>', unsafe_allow_html=True)
-                for g in match_data["casa"]["giocatori"]:
-                    if g.get("GIOCATORE"): # Mostra solo le righe compilate
-                        st.markdown(f'<div class="player-row"><div class="player-num">{g.get("N°")}</div>'
-                                    f'<div class="player-name">{g.get("GIOCATORE")}</div>'
-                                    f'<div class="player-year">{g.get("ANNO")}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card-team"><p class="team-name">🏠 {casa[0]}</p>'
+                            f'<p class="all-name"><b>All:</b> {casa[1]}</p></div>', unsafe_allow_html=True)
+                for g in casa[2]: # g è una lista tipo: [Numero, Nome, Anno]
+                    st.markdown(f'<div class="player-row"><div class="player-num">{g[0]}</div>'
+                                f'<div class="player-name">{g[1]}</div>'
+                                f'<div class="player-year">{g[2]}</div></div>', unsafe_allow_html=True)
             
-            # 4. Colonna Squadra Ospite
+            # Squadra Ospite
             with col2:
-                st.markdown(f'<div class="card-team"><p class="team-name">🚀 {match_data["ospite"]["squadra"]}</p>'
-                            f'<p class="all-name"><b>All:</b> {match_data["ospite"]["allenatore"]}</p></div>', unsafe_allow_html=True)
-                for g in match_data["ospite"]["giocatori"]:
-                    if g.get("GIOCATORE"):
-                        st.markdown(f'<div class="player-row"><div class="player-num">{g.get("N°")}</div>'
-                                    f'<div class="player-name">{g.get("GIOCATORE")}</div>'
-                                    f'<div class="player-year">{g.get("ANNO")}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card-team"><p class="team-name">🚀 {ospite[0]}</p>'
+                            f'<p class="all-name"><b>All:</b> {ospite[1]}</p></div>', unsafe_allow_html=True)
+                for g in ospite[2]:
+                    st.markdown(f'<div class="player-row"><div class="player-num">{g[0]}</div>'
+                                f'<div class="player-name">{g[1]}</div>'
+                                f'<div class="player-year">{g[2]}</div></div>', unsafe_allow_html=True)
                         
             st.markdown("---")
-            st.caption(f"🏁 Arbitro: {match_data['info'].get('arbitro', '')} | Assistenti: {match_data['info'].get('assistente1', '')} - {match_data['info'].get('assistente2', '')}")
-            st.stop() # Blocca l'applicazione mostrando esclusivamente lo schermo per il telefono
+            st.caption(f"🏁 Arbitro: {info[2]} | Assistenti: {info[3]} - {info[4]}")
+            st.stop()
         except Exception as e:
             st.error("Impossibile caricare i dati della formazione. Il link potrebbe essere corrotto.")
