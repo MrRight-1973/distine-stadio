@@ -70,14 +70,34 @@ if st.session_state["elaborato"]:
     col_ed1, col_ed2 = st.columns(2)
     with col_ed1:
         st.write(f"### {info['squadra_casa']} (Allenatore: {info['all_casa']})")
-        # st.data_editor permette la modifica manuale in tempo reale della griglia
+        # Salviamo l'output modificato dall'utente
         griglia_casa_modificata = st.data_editor(st.session_state["griglia_casa"], num_rows="dynamic", key="editor_casa")
     
     with col_ed2:
         st.write(f"### {info['squadra_ospite']} (Allenatore: {info['all_ospite']})")
+        # Salviamo l'output modificato dall'utente
         griglia_ospite_modificata = st.data_editor(st.session_state["griglia_ospite"], num_rows="dynamic", key="editor_ospite")
 
-    # Esempio di bottone per generare il PDF finale
-    if st.button("📄 Genera PDF Distinta Unificata"):
-        # Qui richiami la funzione genera_pdf importata
-        st.write("Generazione in corso...")
+    st.divider()
+    st.subheader("🖨️ Fase 3: Esportazione")
+
+    try:
+        # 1. Richiamiamo la tua funzione custom per generare il PDF passando i dati aggiornati
+        # Nota: adegua i parametri in base a come è definita esattamente la tua 'genera_pdf' in estrattore.py
+        pdf_bytes = genera_pdf(
+            info=info, 
+            df_casa=griglia_casa_modificata, 
+            df_ospite=griglia_ospite_modificata
+        )
+        
+        # 2. Creiamo il pulsante nativo di Streamlit per scaricare il file
+        st.download_button(
+            label="📄 Scarica PDF Distinta Unificata",
+            data=pdf_bytes,
+            file_name=f"distinta_{info['squadra_casa']}_vs_{info['squadra_ospite']}.pdf",
+            mime="application/pdf",
+            type="primary"
+        )
+        
+    except Exception as e:
+        st.error(f"Errore durante la creazione del PDF: {e}")
