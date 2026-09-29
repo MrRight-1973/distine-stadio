@@ -1,26 +1,90 @@
 import streamlit as st
 import io
 import qrcode
+import os
+import json
 import pandas as pd
 from estrattore import analizza_distinta
 from creatore_pdf import genera_pdf
 from utils import pulisci_testo
-from pagine_web import mostra_pagina_formazione
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 
-# --- CONTROLLO ACCESSO DA QR CODE SMARTPHONE (BLINDATO) ---
-# Eseguiamo il controllo prima di caricare qualsiasi altro elemento grafico dell'interfaccia
-mostra_pagina_formazione()
+# ==============================================================================
+# --- CONTROLLO ACCESSO SMARTPHONE (INTERCETTAZIONE PARAMETRO URL BLINDATA) ---
+# ==============================================================================
+params = st.query_parameters
+match_id = params.get("match")
 
-# Se l'utente ha scansionato il QR, questa funzione si attiva e mostra solo la formazione, ignorando il pannello di gestione.
+if match_id:
+    try:
+        percorso_file = os.path.join("match_data", f"{match_id}.json")
+        
+        if os.path.exists(percorso_file):
+            with open(percorso_file, "r", encoding="utf-8") as f_in:
+                pacchetto = json.load(f_in)
+            
+            info = pacchetto["info"]     # [campionato, data, arbitro, ass1, ass2]
+            casa = pacchetto["casa"]     # [squadra, allenatore, giocatori_lista]
+            ospite = pacchetto["ospite"] # [squadra, allenatore, giocatori_lista]
+            
+            # --- STILE GRAFICO ASD AZZURRA DUE CARRARE ---
+            st.markdown("""
+                <style>
+                .main-title { color: #0096FF; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 2px; }
+                .sub-title { color: #555; text-align: center; font-size: 15px; margin-bottom: 20px; line-height: 1.4; }
+                .card-team { background-color: #E6F2FF; border-left: 5px solid #0096FF; padding: 12px; border-radius: 4px; margin-bottom: 12px; }
+                .team-name { color: #0096FF; font-size: 20px; font-weight: bold; margin: 0; }
+                .all-name { color: #333; font-size: 14px; margin: 4px 0 0 0; }
+                .player-row { display: flex; padding: 7px 0; border-bottom: 1px solid #E2E8F0; font-size: 15px; }
+                .player-num { width: 35px; font-weight: bold; color: #0096FF; }
+                .player-name { flex-grow: 1; color: #1A202C; }
+                .player-year { width: 50px; color: #718096; text-align: right; }
+                .info-footer { background-color: #F7FAFC; padding: 10px; border-radius: 4px; text-align: center; font-size: 13px; color: #4A5568; margin-top: 20px; }
+                </style>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<p class="main-title">⚽ FORMAZIONI DI GARA LND</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="sub-title">🏆 <b>{info[0]}</b><br>📅 Data: {info[1]}</p>', unsafe_allow_html=True)
+            
+            col_m1, col_m2 = st.columns(2)
+            
+            with col_m1:
+                st.markdown(f'<div class="card-team"><p class="team-name">🏠 {casa[0]}</p>'
+                            f'<p class="all-name"><b>Allenatore:</b> {casa[1]}</p></div>', unsafe_allow_html=True)
+                for g in casa[2]:
+                    st.markdown(f'<div class="player-row"><div class="player-num">{g[0]}</div>'
+                                f'<div class="player-name">{g[1]}</div>'
+                                f'<div class="player-year">{g[2]}</div></div>', unsafe_allow_html=True)
+            
+            with col_m2:
+                st.markdown(f'<div class="card-team"><p class="team-name">🚀 {ospite[0]}</p>'
+                            f'<p class="all-name"><b>Allenatore:</b> {ospite[1]}</p></div>', unsafe_allow_html=True)
+                for g in ospite[2]:
+                    st.markdown(f'<div class="player-row"><div class="player-num">{g[0]}</div>'
+                                f'<div class="player-name">{g[1]}</div>'
+                                f'<div class="player-year">{g[2]}</div></div>', unsafe_allow_html=True)
+            
+            st.markdown(f'<div class="info-footer">🏁 <b>Arbitro:</b> {info[2]} | 🚩 <b>Assistenti:</b> {info[3]} - {info[4]}</div>', unsafe_allow_html=True)
+            
+            # WhatsApp Button per i dirigenti
+            testo_condivisione = f"Formazioni {casa[0]} vs {ospite[0]} del {info[1]}: https://streamlit.app{match_id}"
+            st.write("")
+            st.page_link(f"https://whatsapp.com{testo_condivisione}", label="📲 Condividi Formazione su WhatsApp", icon="💬")
+            
+            st.stop() # INTERRUZIONE FORZATA: Nasconde completamente la pagina di gestione dei file
+        else:
+            st.error("Inquadratura fallita: i dati di questa partita non sono memorizzati sul server.")
+            st.stop()
+    except Exception as e:
+        st.error(f"Errore nel caricamento della distinta mobile: {e}")
+        st.stop()
 
-st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
-
-st.title("⚽ Centro Gestione Distinte Gara Gestionale")
-st.write("Carica i fogli gara ed effettua modifiche o slittamenti istantanei sulle liste.")
-
+# ==============================================================================
+# --- INTERFACCIA DI AMMINISTRAZIONE STANDARD (VISTA SOLO DA PC) ---
+# ==============================================================================
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
+# ... (Da qui in poi prosegui con il resto del tuo codice originale: "if griglia_casa not in st.session_state ecc...")
 
 if "griglia_casa" not in st.session_state:
     st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
