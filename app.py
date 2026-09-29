@@ -235,8 +235,25 @@ if "pdf_interattivo_pronto" in st.session_state:
             use_container_width=True
         )
         
+# --- ANTEPRIMA VISIVA DEL QR CODE A SCHERMO ---
 if "pdf_interattivo_pronto" in st.session_state and "ultimo_qr_link" in st.session_state:
     st.markdown("---")
     st.markdown("### 📱 Anteprima della Pagina Web per Smartphone")
-    st.write("Puoi inquadrare questo codice adesso con il tuo telefono per verificare la pagina delle formazioni:")
-    st.qrcode(st.session_state["ultimo_qr_link"])
+    st.write("Inquadra questo codice con il tuo telefono per verificare la pagina delle formazioni in tempo reale:")
+    
+    try:
+        import io
+        import qrcode
+        from PIL import Image
+        
+        # Rigeneriamo rapidamente l'immagine visiva del QR per lo schermo di Streamlit
+        qr_display = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+        qr_display.add_data(st.session_state["ultimo_qr_link"])
+        qr_display.make(fit=True)
+        img_display = qr_display.make_image(fill_color="black", back_color="white")
+        
+        # Mostriamo l'immagine nativamente con st.image per evitare il crash
+        st.image(img_display, caption="QR Code Formazioni - ASD Azzurra Due Carrare", width=250)
+        
+    except Exception as qr_err:
+        st.warning("Anteprima grafica del QR non disponibile a schermo, ma integrata correttamente nel PDF.")
