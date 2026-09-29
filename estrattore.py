@@ -10,15 +10,13 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 def pulisci_testo(testo):
-    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
-    if not testo or str(testo).strip() == "":
+    if testo is None or str(testo).strip() == "":
         return ""
     testo_pulito = str(testo).replace("_", " ")
     testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
     return testo_pulito.strip().upper()
 
 def encode_image(uploaded_file):
-    """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
@@ -28,7 +26,6 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI ed estrae i dati in formato JSON garantendo 20 righe strutturate"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
@@ -62,12 +59,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    # CORREZIONE CRITICA: Aggiunto l'indice [0] obbligatorio per evitare l'errore 'list' object
     risultato_grezzo = response.choices[0].message.content.strip()
-    if risultato_grezzo.startswith("```"):
-        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
-        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
-        
     dati = json.loads(risultato_grezzo)
     
     dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
@@ -102,7 +94,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     return dati
 
 def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
-    """Genera il file PDF A4 con colonne affiancate e QR code integrato"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
@@ -176,9 +167,13 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         ]
         
         for index, g in enumerate(dati.get('giocatori', [])):
-            testo_num = Paragraph(str(g.get('N°', index + 1)), normal_style)
-            testo_nome = Paragraph(pulisci_testo(g.get('GIOCATORE', '')), normal_style)
-            testo_anno = Paragraph(str(g.get('ANNO', '')), normal_style)
+            num_val = g.get('N°', g.get('numero', index + 1))
+            gioc_val = g.get('GIOCATORE', g.get('cognome_nome', ''))
+            anno_val = g.get('ANNO', g.get('anno_nascita', ''))
+            
+            testo_num = Paragraph(str(num_val), normal_style)
+            testo_nome = Paragraph(pulisci_testo(gioc_val), normal_style)
+            testo_anno = Paragraph(str(anno_val), normal_style)
             tabella_dati.append([testo_num, testo_nome, testo_anno])
             
         t = Table(tabella_dati, colWidths=[30, 185, 45])
