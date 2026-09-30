@@ -53,9 +53,10 @@ is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
+# Pannello di accesso o reindirizzamento automatico alla segreteria
 if st.session_state["vista_attiva"] == "pubblica":
-    render_pagina_spettatori()
+    st.session_state["vista_attiva"] = "segreteria"
+    st.rerun()
     
     # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
     if not is_mobile:
