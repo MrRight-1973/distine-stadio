@@ -4,7 +4,7 @@ import re
 from PIL import Image
 
 def pulisci_testo(testo):
-    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO"""
+    """Rimuove i caratteri speciali come _ e converte tutto in MAIUSCOLO."""
     if not testo or str(testo).strip() == "":
         return ""
     testo_pulito = str(testo).replace("_", " ")
@@ -12,7 +12,7 @@ def pulisci_testo(testo):
     return testo_pulito.strip().upper()
 
 def encode_image(uploaded_file):
-    """Apre l'immagine, la ridimensiona se troppo grande e la converte in stringa Base64"""
+    """Apre l'immagine, la ridimensiona e la converte in stringa Base64 per l'API."""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
