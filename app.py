@@ -9,28 +9,32 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# RILEVAMENTO INTELLIGENTE DEL SISTEMA OPERATIVO
-headers_contesto = st.context.headers
-user_agent = headers_contesto.get("User-Agent", "").lower()
+# Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
+user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
+# Gestione solida della vista tramite Session State
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
+# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
+    # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
     if not is_mobile:
         st.markdown("---")
         with st.expander("⚙️ Area Riservata Segreteria PC"):
             password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
             if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
+                # PASSWORD UFFICIALE DI ACCESSO
                 if password_inserita == "azzurra2026":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
                 else:
                     st.error("❌ Password errata. Accesso negato.")
 else:
+    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
     st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
     
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
@@ -110,13 +114,15 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://streamlit.app"
+                # FORZATURA RIGIDA: Il link caricato all'interno del QR Code punta al dominio ufficiale pulito
+                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/"
                 
+                # Salva il file JSON condiviso sul server cloud
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # RIGENERAZIONE COERENTE E FORZATA DEL QR CODE AD ALTO CONTRASTO
+                # Generazione pulita ad alto contrasto del QR Code (Niente TinyURL, link diretto e scolpito)
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
@@ -125,6 +131,6 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online pubblicata! File PDF pronto.")
+                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
 
     render_download_buttons()
