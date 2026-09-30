@@ -9,7 +9,10 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# INTERCETTAZIONE E ABBATTIMENTO DEI BADGE DI STREAMLIT CLOUD
+# CONFIGURAZIONE INIZIALE DELLA PAGINA (Fatta una sola volta in cima per evitare crash)
+st.set_page_config(page_title="Distinte Live - Azzurra Due Carrare", page_icon="⚽", layout="wide")
+
+# ABBATTIMENTO DEI BADGE E STRUTTURE STREAMLIT CLOUD
 st.markdown("""
     <style>
     [data-testid="stStatusWidget"],
@@ -43,22 +46,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
+# Identificazione dispositivo
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Gestione solida della vista tramite Session State - Forza la segreteria su PC, pubblica su Mobile
+# Inizializzazione Session State sicura senza loop
 if "vista_attiva" not in st.session_state:
-    if is_mobile:
-        st.session_state["vista_attiva"] = "pubblica"
-    else:
-        st.session_state["vista_attiva"] = "segreteria"
+    st.session_state["vista_attiva"] = "pubblica"
 
-# Se l'utente è un tifoso (vista pubblica), mostra il Match Program digitale
+# RENDERING DELLA VISTA ATTIVA
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
-    # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
+    # Area sblocco visibile solo su PC per evitare pasticci da mobile
     if not is_mobile:
         st.markdown("---")
         with st.expander("⚙️ Area Riservata Segreteria PC"):
@@ -68,22 +68,19 @@ if st.session_state["vista_attiva"] == "pubblica":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
                 else:
-                    st.error("❌ Password errata. Accesso negato.")
+                    st.error("❌ Password errata.")
 else:
-    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
-    if is_mobile:
-        if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
-            st.session_state["vista_attiva"] = "pubblica"
-            st.rerun()
+    # --- PANNELLO PC SEGRETERIA GESTIONALE ---
+    if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
+        st.session_state["vista_attiva"] = "pubblica"
+        st.rerun()
         
     st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
-    st.write("La conferma delle liste aggiornerà la pagina web in tempo reale e genererà il PDF A4.")
     
     api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
     def reset_solo_dati_ai():
-        chiavi_da_eliminare = ["dati_mappati", "macro_info", "firma_scansione_attiva", "pdf_interattivo_pronto"]
-        for chiave in chiavi_da_eliminare:
+        for chiave in ["dati_mappati", "macro_info", "firma_scansione_attiva", "pdf_interattivo_pronto"]:
             if chiave in st.session_state:
                 del st.session_state[chiave]
         st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
@@ -114,7 +111,7 @@ else:
         if "dati_mappati" not in st.session_state:
             with c_scan:
                 if st.button("🔍 Fase 1: Esegui Scansione AI delle Liste", type="primary", use_container_width=True):
-                    with st.spinner("Estrazione giocatori e date in corso con GPT-4o..."):
+                    with st.spinner("Scansione in corso con GPT-4o..."):
                         try:
                             casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                             ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
@@ -128,7 +125,7 @@ else:
                             st.session_state["dati_mappati"] = True
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Errore nell'estrazione: {e}")
+                            st.error(f"Errore: {e}")
 
     if "dati_mappati" in st.session_state:
         st.markdown("---")
@@ -145,7 +142,7 @@ else:
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("Pubblicazione dati e scrittura PDF..."):
+            with st.spinner("Generazione dati e PDF..."):
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
@@ -163,7 +160,7 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online pubblicata con successo! PDF Pronto.")
+                st.success("🎉 Distinta pubblicata! PDF Generato.")
                 st.rerun()
 
     render_download_buttons()
