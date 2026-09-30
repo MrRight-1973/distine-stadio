@@ -12,13 +12,12 @@ from ui_spettatore import render_pagina_spettatori
 # RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
     <style>
-    /* Intercetta il contenitore del badge mobile e lo distrugge */
-    [data-testid="stStatusWidget"],
+    /* 1. SELETTORE JOLLY ANTI-EMOTION (Rimuove il badge su qualsiasi smartphone) */
+    div[class*="viewerBadge"],
+    a[class*="viewerBadge"],
     [data-testid="stFooter"],
     footer,
     .stFooter,
-    div[class*="viewerBadge"],
-    div[class*="StyledEmbedControlBar"],
     header,
     .stAppDeployButton {
         display: none !important;
@@ -29,7 +28,7 @@ st.markdown("""
         pointer-events: none !important;
     }
     
-    /* Forza l'applicazione a non tenere lo spazio vuoto protettivo in fondo */
+    /* 2. RESET DEI MARGINI DELL'APPLICAZIONE MOBILE */
     .stApp {
         margin-bottom: 0px !important;
         padding-bottom: 0px !important;
