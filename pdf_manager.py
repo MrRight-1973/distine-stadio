@@ -23,20 +23,20 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         Spacer(1, 4)
     ]
     
-    # MODIFICA: Terna arbitrale allineata verticalmente in colonna sotto l'arbitro
+    # CORREZIONE: Allineamento e ordine corretto dei dati per evitare testi incrociati o vuoti
     tabella_info_dati = [
         [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style)],
         [Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[270, 270])
+    t_info = Table(tabella_info_dati, colWidths=[225, 225])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5), 
-        ('TOPPADDING', (0,0), (-1,-1), 1.5)
+        ('TOPPADDING', (0,0), (-1,-1), 1.5),
+        ('VALIGN', (0,0), (-1,-1), 'TOP')
     ]))
     elementi_sinistra.append(t_info)
     
-    # Lettura locale del logo societario con Aspect Ratio corretto
     img_logo = None
     nome_file_logo = "logo_azzurra.png"
     if os.path.exists(nome_file_logo):
@@ -44,22 +44,20 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             img_temporanea = RLImage(nome_file_logo)
             w_originale = img_temporanea.drawWidth
             h_originale = img_temporanea.drawHeight
-            
             larghezza_target = 50.0
             altezza_proporzionale = (h_originale / w_originale) * larghezza_target
-            
             img_logo = RLImage(nome_file_logo, width=larghezza_target, height=altezza_proporzionale)
         except Exception:
             img_logo = None
 
     if img_logo:
-        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[490, 50])
+        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[460, 50])
         t_header.setStyle(TableStyle([
             ('ALIGN', (1,0), (1,0), 'RIGHT'),
-            ('VALIGN', (1,0), (1,0), 'MIDDLE')
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
         ]))
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[490, 50])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[460, 50])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -84,7 +82,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
                 Paragraph(str(g.get('ANNO', '')), normal_style)
             ])
             
-        t = Table(tabella_dati, colWidths=[30, 185, 45])
+        t = Table(tabella_dati, colWidths=[25, 185, 45])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2.2),
@@ -95,7 +93,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         elementi_squadra.append(t)
         return elementi_squadra
 
-    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 20, 260])
+    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[255, 10, 255])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
@@ -112,7 +110,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             [img_qr_pdf],
             [Spacer(1, 3)],
             [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
-        ], colWidths=[540])
+        ], colWidths=[520])
         
         t_qr_footer.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
