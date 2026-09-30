@@ -28,7 +28,7 @@ def normalizza_anno(anno_grezzo):
     return ""
 
 def encode_image(uploaded_file):
-    """Aumenta il contrasto interno e mantiene alta la risoluzione per l'OCR delle cifre"""
+    """Mantiene alta la risoluzione per l'OCR delle cifre"""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
@@ -38,30 +38,25 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a GPT-4o focalizzando l'attenzione sul ruolo specifico (CASA o OSPITE)"""
+    """Estrae SOLO l'allenatore, i giocatori e le date per la specifica squadra"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     focus_ruolo = (
-        "ATTENZIONE: Stai analizzando la SQUADRA IN OSPITE (colonna/sezione OSPITI o FUORI CASA). "
-        "Ignora completamente i giocatori della squadra di casa se presenti nella stessa immagine."
+        "ATTENZIONE: Stai analizzando la colonna/sezione degli OSPITI. Ignora la squadra di casa."
         if ruolo_squadra == "OSPITE" else
-        "ATTENZIONE: Stai analizzando la SQUADRA IN CASA (colonna/sezione LOCALI o IN CASA). "
-        "Ignora completamente i giocatori della squadra ospite se presenti nella stessa immagine."
+        "ATTENZIONE: Stai analizzando la colonna/sezione dei LOCALI. Ignora la squadra ospite."
     )
     
     prompt_sistema = (
-        f"Sei un sistema OCR umano ad altissima precisione per distinte LND.\n"
+        f"Sei un sistema OCR ad altissima precisione per distinte LND.\n"
         f"{focus_ruolo}\n\n"
         "REGOLE RIGIDE DI SCANSIONE:\n"
-        "1. Trova il Nome della Società Corretta e il relativo Allenatore della sezione indicata.\n"
-        "2. Concentrati sulla colonna dell'ANNO DI NASCITA di questa specifica squadra. "
-        "Assicurati di non scambiare le righe: il giocatore N°5 deve avere l'anno scritto sulla sua stessa riga.\n"
-        "3. Non confondere l'anno di nascita con codici tessera o numeri di maglia.\n"
-        "4. Cerca la sigla del Capitano (C, CAP) e del Vice (VC, VICE) solo per questa squadra.\n\n"
-        "Rispondi ESCLUSIVAMENTE con questo schema JSON:\n"
+        "1. Trova l'Allenatore della sezione indicata.\n"
+        "2. Concentrati sulla colonna dei CALCIATORI e dell'ANNO DI NASCITA riga per riga.\n"
+        "3. Cerca la sigla del Capitano (C, CAP) e del Vice (VC, VICE) accanto al nome o al numero.\n\n"
+        "Rispondi ESCLUSIVAMENTE con questo schema JSON (NON includere il nome della squadra):\n"
         "{\n"
-        "  \"squadra\": \"NOME SOCIETA\",\n"
         "  \"allenatore\": \"COGNOME NOME\",\n"
         "  \"capitano_num\": 10,\n"
         "  \"vice_capitano_num\": 4,\n"
@@ -81,7 +76,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Esegui l'estrazione OCR per la squadra: {ruolo_squadra}."},
+                    {"type": "text", "text": f"Esegui l'estrazione OCR dei giocatori per: {ruolo_squadra}."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -89,22 +84,17 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content.strip()
-    
-    # PROTEZIONE DA MARKDOWN CORRETTA: Rimuove i blocchi ```json ... ``` se presenti
+    risultato_grezzo = response.choices.message.content.strip()
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
         risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
         
     dati = json.loads(risultato_grezzo)
     
-    # Pulizia macro informazioni
-    dati["squadra"] = pulisci_testo(dati.get("squadra", ""))
     dati["allenatore"] = pulisci_testo(dati.get("allenatore", ""))
     dati["campionato"] = pulisci_testo(dati.get("campionato", ""))
     dati["data"] = pulisci_testo(dati.get("data", ""))
     
-    # Mappatura ordinata su 20 righe fisse
     giocatori_estratti = {}
     for g in dati.get("giocatori", []):
         try:
