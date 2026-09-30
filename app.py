@@ -201,4 +201,9 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                
+
+with open("distinta_corrente.pdf", "wb") as f_pdf:
+f_pdf.write(pdf_bytes)
+st.session_state["pdf_interattivo_pronto"] = pdf_bytes
+st.success("🎉 Distinta pubblicata! Il QR code ora scarica direttamente il PDF A4.")
+render_download_buttons()
