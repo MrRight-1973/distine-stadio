@@ -136,7 +136,7 @@ else:
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("1. Generazione file PDF ufficiale..."):
+            with st.spinner("Generazione file PDF ufficiale..."):
                 # Recupera i dati aggiornati dalle tabelle di modifica
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -144,7 +144,7 @@ else:
                 link_pubblico_spettatori = "https://streamlit.app"
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 
-                # [SICUREZZA] Scrittura locale del JSON per il funzionamento originale di Streamlit
+                # Scrittura locale del JSON per il funzionamento originale di Streamlit
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
@@ -156,18 +156,16 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                # 🛡️ OPERAZIONE SALVA-PDF: Salvato all'inizio del Session State.
-                # In questo modo, anche se internet dovesse saltare, il pulsante per scaricare il PDF apparirà comunque.
+                # Salvataggio immediato del PDF nel Session State
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
             
-            with st.spinner("2. Sincronizzazione con la pagina HTML di GitHub..."):
-                import requests
+            with st.spinner("Sincronizzazione con la pagina HTML di GitHub..."):
                 try:
-                    # Utilizziamo kvdb.io: un magazzino dati pubblico, immediato e che non richiede chiavi d'accesso private
+                    # Utilizziamo kvdb.io per il transito dati istantaneo senza credenziali bloccanti
                     url_pulito = "https://kvdb.io"
                     requests.post(url_pulito, json=pacchetto_gara, timeout=1.5)
                 except Exception:
-                    pass # Se l'invio fallisce, prosegue per non bloccare lo scaricamento del PDF
+                    pass # Se l'invio web fallisce, non blocca l'app
                 
             st.success("🎉 Distinta online pubblicata! File PDF pronto.")
             st.rerun()
