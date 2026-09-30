@@ -3,11 +3,13 @@ import qrcode
 import io
 import json
 import pandas as pd
+import requests # <--- SPOSTATO IN CIMA AL FILE
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
+
 
 # DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
