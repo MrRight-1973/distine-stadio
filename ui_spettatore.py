@@ -79,3 +79,12 @@ def render_pagina_spettatori():
         
     # INSERIMENTO DEL CUSCINETTO FISICO DI PROTEZIONE IN FONDO ALLA PAGINA SMARTPHONE
     st.markdown("<div class='spazio-sicurezza-footer'>© Servizio Distinte Ufficiali Azzurra Due Carrare</div>", unsafe_allow_html=True)
+        # FORZATURA VISIVA: Iniettiamo una serie di ritorni a capo fisici che il browser non può ignorare
+    st.markdown("""
+        <div style='margin-top: 40px; border-top: 2px dashed #CBD5E0; padding-top: 20px; text-align: center;'>
+            <p style='color: #2B6CB0; font-weight: bold; font-size: 14px;'>✓ ELENCO COMPLETO E VERIFICATO</p>
+            <p style='color: #A0AEC0; font-size: 11px;'>© 2026 Azzurra Due Carrare - Distinta Ufficiale</p>
+            <br><br><br><br><br><br><br><br>
+        </div>
+    """, unsafe_allow_html=True)
+
