@@ -150,12 +150,23 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/?embed=true"
-                
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
+                
+                # 1. Salva il JSON interno per la segreteria
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
+                # 2. GENERAZIONE DEL FILE HTML PURO PER I TIFOSI (SENZA STREAMLIT)
+                from ui_spettatore import genera_html_tifosi
+                codice_html = genera_html_tifosi(pacchetto_gara)
+                with open("distinta.html", "w", encoding="utf-8") as f:
+                    f.write(codice_html)
+                
+                # 3. IMPOSTA IL LINK DELLE GITHUB PAGES NEL QR CODE
+                # Sostituisci questo indirizzo con il link effettivo delle tue GitHub Pages abilitate al punto precedente
+                link_pubblico_spettatori = "https://github.io"
+                
+                # Generazione del QR code
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
@@ -164,6 +175,4 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
-
-    render_download_buttons()
+                st.success("🎉 Distinta online pubblicata! I tifosi vedranno la pagina web statica super-leggera senza loghi né tasti fullscreen.")
