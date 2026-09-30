@@ -9,41 +9,30 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# 1. RILEVAMENTO INTELLIGENTE DEL SISTEMA OPERATIVO
-# Estrae le informazioni sul dispositivo che sta visitando la pagina web
+# RILEVAMENTO INTELLIGENTE DEL SISTEMA OPERATIVO
 headers_contesto = st.context.headers
 user_agent = headers_contesto.get("User-Agent", "").lower()
-
-# Verifica se il chiamante è un dispositivo mobile (Smartphone/Tablet)
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Inizializzazione dello stato della vista (Default: Pubblica per Spettatori)
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Se lo stato è impostato su pubblica, mostra la distinta ottimizzata per lo smartphone del tifoso
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
-    # IL PULSANTE APPARE SOLO SE IL CHIAMANTE NON È UN TELEFONO (Protezione OS)
     if not is_mobile:
         st.markdown("---")
-        # Riquadro espandibile per non appesantire la grafica del tifoso su PC
         with st.expander("⚙️ Area Riservata Segreteria PC"):
             password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
-            
             if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
-                # PASSWORD DI SICUREZZA (Modificabile a piacimento nelle virgolette)
                 if password_inserita == "azzurra2026":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
                 else:
                     st.error("❌ Password errata. Accesso negato.")
 else:
-    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
     st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
     
-    # Pulsante in alto per tornare istantaneamente alla vista pubblico e controllare il risultato
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
         st.session_state["vista_attiva"] = "pubblica"
         st.rerun()
@@ -127,7 +116,8 @@ else:
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=4)
+                # RIGENERAZIONE COERENTE E FORZATA DEL QR CODE AD ALTO CONTRASTO
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
                 
