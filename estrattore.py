@@ -84,7 +84,9 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices.message.content.strip()
+    # CORREZIONE: Gestione sicura ed esplicita dell'indice delle scelte di risposta dell'API
+    risultato_grezzo = response.choices[0].message.content.strip()
+    
     if risultato_grezzo.startswith("```"):
         risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
         risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
