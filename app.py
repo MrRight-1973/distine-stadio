@@ -138,24 +138,27 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # Il link originale di Streamlit per il QR Code (rimane tutto come prima)
                 link_pubblico_spettatori = "https://streamlit.app"
-                
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 
-                # ─── AGGIUNTA: POPOLIAMO ANCHE LA PAGINA HTML ESTERNA DI GITHUB ───
+                # ─── AGGIORNAMENTO HTML ESTERNO CON TIMEOUT DI SICUREZZA AI CRASH ───
                 import requests
                 try:
-                    # Spedisce i dati al database che alimenta il tuo file distinta.html
-                    requests.post("https://npoint.io", json=pacchetto_gara)
+                    # timeout=2.0 impedisce all'app di bloccarsi se il server esterno è lento
+                    requests.post(
+                        "https://npoint.io", 
+                        json=pacchetto_gara, 
+                        timeout=2.0
+                    )
                 except Exception as e:
-                    pass # Se l'invio esterno fallisce, l'app Streamlit continua comunque senza bloccarsi
-                # ──────────────────────────────────────────────────────────────────
+                    # In caso di errore di rete, l'app ignora il blocco e va avanti
+                    pass 
                 
-                # Salvataggio locale standard del JSON per Streamlit
+                # Scrittura locale del JSON per il corretto funzionamento di Streamlit
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
+                # Generazione fisica del QR Code
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
@@ -163,5 +166,10 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
+                # Generazione del PDF A4 salvato nello stato della sessione
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                
                 st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
+                
+                # FORZATURA DI RINFRESCO: Sblocca l'interfaccia e mostra SUBITO il PDF a schermo
+                st.rerun()
