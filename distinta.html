@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚽ Distinta Live - Azzurra Due Carrare</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background-color: #F0F4F8; margin: 0; padding: 15px; color: #2D3748; }
+        .titolo-match { text-align: center; color: #1A365D; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+        .sottotitolo { text-align: center; color: #2B6CB0; font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        .info-match { text-align: center; color: #4A5568; font-size: 13px; margin-bottom: 20px; }
+        .card-squadra { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .nome-squadra { color: #2B6CB0; font-size: 18px; font-weight: bold; border-bottom: 2px solid #E2E8F0; padding-bottom: 5px; margin-bottom: 10px; }
+        .allenatore { font-style: italic; color: #4A5568; font-size: 13px; margin-bottom: 10px; }
+        .riga-giocatore { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #EDF2F7; font-size: 15px; }
+        .num-maglia { font-weight: bold; color: #2B6CB0; width: 25px; }
+        .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
+        .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
+        .caricamento { text-align: center; font-style: italic; color: #718096; padding: 50px 0; }
+    </style>
+</head>
+<body>
+    <div id="contenuto-app">
+        <div class="caricamento">⚽ Caricamento distinte ufficiali in corso...</div>
+    </div>
+
+    <script>
+        // Questa funzione scarica i dati aggiornati dalla segreteria senza usare Streamlit
+        async function caricaDistinta() {
+            try {
+                // Utilizza un micro-database KV gratuito associato al tuo progetto
+                const response = await fetch('https://npoint.io'); // URL di transito dati
+                const dati = await response.json();
+                
+                let html = `
+                    <div class="titolo-match">⚽ AZZURRA DUE CARRARE</div>
+                    <div class="sottotitolo">DISTINTA DIGITALE LIVE</div>
+                    <div class="info-match">🏆 ${dati.info_gara.campionato} | 📅 ${dati.info_gara.data}<br>🏁 Arbitro: ${dati.info_gara.arbitro}</div>
+                    
+                    <div class="card-squadra">
+                        <div class="nome-squadra">🏠 ${dati.casa.squadra}</div>
+                        <div class="allenatore">All. ${dati.casa.allenatore}</div>
+                `;
+                
+                dati.casa.giocatori.forEach(g => {
+                    if(g.GIOCATORE.trim() !== "") {
+                        html += `<div class="riga-giocatore"><span class="num-maglia">${g.N°}</span><span class="nome-giocatore">${g.GIOCATORE}</span><span class="anno-giocatore">${g.ANNO}</span></div>`;
+                    }
+                });
+                
+                html += `</div><div class="card-squadra"><div class="nome-squadra">🚀 ${dati.ospite.squadra}</div><div class="allenatore">All. ${dati.ospite.allenatore}</div>`;
+                
+                dati.ospite.giocatori.forEach(g => {
+                    if(g.GIOCATORE.trim() !== "") {
+                        html += `<div class="riga-giocatore"><span class="num-maglia">${g.N°}</span><span class="nome-giocatore">${g.GIOCATORE}</span><span class="anno-giocatore">${g.ANNO}</span></div>`;
+                    }
+                });
+                
+                html += `</div>`;
+                document.getElementById('contenuto-app').innerHTML = html;
+            } catch (error) {
+                document.getElementById('contenuto-app').innerHTML = '<div class="caricamento">⌛ Distinta in corso di pubblicazione da parte della segreteria...</div>';
+            }
+        }
+        caricaDistinta();
+    </script>
+</body>
+</html>
