@@ -16,6 +16,17 @@ def render_pagina_spettatori():
         .num-maglia { font-weight: bold; color: #2B6CB0; width: 25px; }
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
+        
+        /* PROTEZIONE SPECIFICA PER SMARTPHONE (Rimuove loghi e scritte in basso a destra) */
+        .viewerBadge_container__1QS13, 
+        div[class*="viewerBadge"], 
+        a[href*="streamlit.io"], 
+        footer, 
+        div[data-testid="stFooter"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
         </style>
     """, unsafe_allow_html=True)
     
