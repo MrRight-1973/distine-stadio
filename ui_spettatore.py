@@ -4,40 +4,40 @@ import os
 
 def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
-    st.markdown("""
-        <style>
-        /* BLOCCO RIGIDO ANTI-LOGO MOBILE */
-        div[class*="viewerBadge"], a[class*="viewerBadge"], [data-testid="stFooter"], footer, .stFooter, header, .stAppDeployButton {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            height: 0px !important;
-        }
-        
-        /* I tuoi stili originali rimangono qui sotto */
-        .main { background-color: #F0F4F8; }
-        .titolo-match { text-align: center; color: #1A365D; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-        .info-match { text-align: center; color: #4A5568; font-size: 14px; margin-bottom: 20px; }
-        .card-squadra { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .nome-squadra { color: #2B6CB0; font-size: 18px; font-weight: bold; border-bottom: 2px solid #E2E8F0; padding-bottom: 5px; margin-bottom: 10px; }
-        .allenatore { font-style: italic; color: #4A5568; font-size: 13px; margin-bottom: 10px; }
-        .riga-giocatore { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #EDF2F7; font-size: 15px; }
-        .num-maglia { font-weight: bold; color: #2B6CB0; width: 25px; }
-        .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
-        .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
-        
-        /* CUSCINETTO PROTETTIVO */
-        .spazio-sicurezza-footer {
-            height: 120px;
-            margin-top: 20px;
-            text-align: center;
-            color: #A0AEC0;
-            font-size: 12px;
-            border-top: 1px dashed #CBD5E0;
-            padding-top: 15px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    /* 1. ABBATTIMENTO DEI CONTENITORI SPECIFICI DI STREAMLIT CLOUD */
+    [data-testid="stStatusWidget"],
+    [data-testid="stFooter"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    div[class*="viewerBadge"],
+    div[class*="StatusWidget"],
+    div[class*="StyledEmbedControlBar"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0px !important;
+        max-height: 0px !important;
+        width: 0px !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* 2. ELIMINAZIONE DEL CUSCINETTO DI SPAZIO CHE IL TELEFONO CREA PER IL BADGE */
+    iframe {
+        display: none !important;
+    }
+    .stApp {
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
     
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
     st.markdown("<div class='titolo-match' style='font-size:18px; color:#2B6CB0;'>DISTINTA DIGITALE LIVE</div>", unsafe_allow_html=True)
