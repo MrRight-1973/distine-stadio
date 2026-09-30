@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 
 def applica_shift(chiave_griglia, riga, direzione):
-    """Esegue lo slittamento dei giocatori in alto o in basso mantenendo le 20 righe"""
     df = st.session_state[chiave_griglia].copy().reset_index()
     idx = riga - 1
     
@@ -17,12 +16,11 @@ def applica_shift(chiave_griglia, riga, direzione):
     st.session_state[chiave_griglia] = df_nuovo.set_index("N°")
     st.rerun()
 
-def render_colonna_squadra(label_titolo, chiave_griglia, default_nome, default_all, default_gl):
-    """Disegna l'intera interfaccia di una singola squadra (Casa o Ospite)"""
+def render_colonna_squadra(label_titolo, chiave_griglia, default_nome, default_all):
+    """Interfaccia squadra pulita, senza riferimenti al guardalinee di parte"""
     st.subheader(label_titolo)
     nome = st.text_input(f"Società {label_titolo}", value=default_nome, key=f"n_{chiave_griglia}")
     alln = st.text_input(f"Allenatore {label_titolo}", value=default_all, key=f"a_{chiave_griglia}")
-    g_linee = st.text_input(f"Assistente di parte {label_titolo}", value=default_gl, key=f"g_{chiave_griglia}")
     
     st.session_state[chiave_griglia] = st.data_editor(
         st.session_state[chiave_griglia], 
@@ -30,8 +28,7 @@ def render_colonna_squadra(label_titolo, chiave_griglia, default_nome, default_a
         use_container_width=True
     )
     
-    # Controlli di Shift
-    c1, c2 = st.columns([1, 1])
+    c1, c2 = st.columns()
     with c1:
         riga_scelta = st.selectbox("🎯 Riga", options=list(range(1, 21)), index=12, key=f"sel_{chiave_griglia}")
     with c2:
@@ -44,4 +41,4 @@ def render_colonna_squadra(label_titolo, chiave_griglia, default_nome, default_a
             if st.button("⬆️", key=f"up_{chiave_griglia}", use_container_width=True):
                 applica_shift(chiave_griglia, riga_scelta, "su")
                 
-    return {"squadra": nome, "allenatore": alln, "guardalinee_parte": g_linee}
+    return {"squadra": nome, "allenatore": alln}
