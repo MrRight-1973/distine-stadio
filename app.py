@@ -7,40 +7,41 @@ from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
-from ui_spettatore import genera_html_tifosi
+from ui_spettatore import render_pagina_spettatori
 
-# RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
+# ABBATTIMENTO STRUTTURALE DEI CONTENITORI SPECIFICI STREAMLIT
 st.markdown("""
     <style>
-    /* 1. ABBATTIMENTO DEI CONTENITORI SPECIFICI DI STREAMLIT CLOUD */
+    /* Intercetta i nodi di rendering profondi di Streamlit Cloud */
     [data-testid="stStatusWidget"],
     [data-testid="stFooter"],
     [data-testid="stToolbar"],
     [data-testid="stDecoration"],
     div[class*="viewerBadge"],
     div[class*="StatusWidget"],
-    div[class*="StyledEmbedControlBar"] {
+    div[class*="StyledEmbedControlBar"],
+    footer, 
+    .stFooter,
+    header,
+    .stAppDeployButton {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         height: 0px !important;
         max-height: 0px !important;
         width: 0px !important;
-        overflow: hidden !important;
         pointer-events: none !important;
+        overflow: hidden !important;
     }
-
-    /* 2. ELIMINAZIONE DEL CUSCINETTO DI SPAZIO CHE IL TELEFONO CREA PER IL BADGE */
-    iframe {
-        display: none !important;
+    
+    /* Ottimizzazione dei margini superiori ed inferiori */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
     }
     .stApp {
         margin-bottom: 0px !important;
         padding-bottom: 0px !important;
-    }
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -53,10 +54,9 @@ is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Pannello di accesso o reindirizzamento automatico alla segreteria
+# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
 if st.session_state["vista_attiva"] == "pubblica":
-    st.session_state["vista_attiva"] = "segreteria"
-    st.rerun()
+    render_pagina_spettatori()
     
     # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
     if not is_mobile:
@@ -72,8 +72,6 @@ if st.session_state["vista_attiva"] == "pubblica":
                     st.error("❌ Password errata. Accesso negato.")
 else:
     # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
-    st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
-    
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
         st.session_state["vista_attiva"] = "pubblica"
         st.rerun()
@@ -151,24 +149,22 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
+                # Ripristiniamo il link normale stabile senza frammenti bloccanti
+                link_pubblico_spettatori = "https://streamlit.app"
+                
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
+                with open("distinta_corrente.json", "w", encoding="utf-8") as f:
+                    json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # INVIA I DATI AL DATABASE ONLINE (Aggiorna la pagina dei tifosi all'istante!)
-                try:
-                    requests.post("https://npoint.io", json=pacchetto_gara)
-                except:
-                    pass
-                
-                # Il link fisso delle tue GitHub Pages che conterrà il QR Code sul PDF
-                link_pubblico_spettatori = "https://mrright-1973.github.io/distine-stadio/distinta.html"
-                
-                # Generazione del QR code e del PDF (Il tuo codice standard...)
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
+                
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta pubblicata online con successo!")
+                st.success("🎉 Distinta online pubblicata con successo! PDF Pronto.")
                 st.rerun()
+
+    render_download_buttons()
