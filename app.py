@@ -9,14 +9,32 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# BIVIO DI ACCESSO: Controlla se chi apre è lo spettatore dallo smartphone tramite QR Code
-if st.query_params.get("view") == "public":
+# Inizializzazione dello stato della vista (Default: Pubblica per Spettatori)
+if "vista_attiva" not in st.session_state:
+    st.session_state["vista_attiva"] = "pubblica"
+
+# Se lo stato è impostato su pubblica, mostra la distinta ottimizzata per lo smartphone del tifoso
+if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
+    
+    # Pulsante discreto in fondo alla pagina per consentire alla segreteria di accedere al pannello PC
+    st.markdown("---")
+    c_Accesso = st.columns([2, 1, 2])
+    with c_Accesso[1]:
+        if st.button("⚙️ Accedi Gestione PC", type="secondary", use_container_width=True):
+            st.session_state["vista_attiva"] = "segreteria"
+            st.rerun()
 else:
-    # --- INTERFACCIA PC SEGRETERIA ---
+    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
     st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
+    
+    # Pulsante in alto per tornare istantaneamente alla vista pubblico e controllare il risultato
+    if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
+        st.session_state["vista_attiva"] = "pubblica"
+        st.rerun()
+        
     st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
-    st.write("Carica i fogli gara. La conferma aggiornerà automaticamente la pagina web degli smartphone tifosi.")
+    st.write("La conferma delle liste aggiornerà la pagina web in tempo reale e genererà il PDF A4.")
     
     api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
@@ -88,21 +106,16 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # CONFIGURAZIONE STRUTTURATA: Forzatura del link esatto
-                link_pubblico_spettatori = "https://streamlit.app"
+                # LINK PULITO: Il QR Code ora punta al link ufficiale puro senza parametri fastidiosi
+                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/"
                 
-                # Salva il file JSON condiviso sul server cloud
+                # Salva il file JSON centralizzato sul server cloud
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione ottimizzata del QR Code (Risoluzione e contrasto migliorati per l'ottica mobile)
-                qr = qrcode.QRCode(
-                    version=None,
-                    error_correction=qrcode.constants.ERROR_CORRECT_M,
-                    box_size=12,
-                    border=4,
-                )
+                # Generazione stabile del QR Code
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
                 
@@ -110,6 +123,6 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online aggiornata con successo! Scarica il PDF e fai una prova di scansione.")
+                st.success("🎉 Distinta online pubblicata! File PDF pronto.")
 
-render_download_buttons()
+    render_download_buttons()
