@@ -72,8 +72,22 @@ def render_pagina_spettatori():
             if nome_g.strip():
                 st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+
+        # --- NUOVO PULSANTE DI DOWNLOAD PER I TIFOSI ---
+        if "pdf_interattivo_pronto" in st.session_state:
+            st.write("")
+            st.download_button(
+                label="📄 SCARICA DISTINTA UFFICIALE (PDF A4)",
+                data=st.session_state["pdf_interattivo_pronto"],
+                file_name=f"distinta_{casa_dati.get('squadra', 'casa')}_{ospite_dati.get('squadra', 'ospite')}.pdf",
+                mime="application/pdf",
+                type="secondary",
+                use_container_width=True
+            )
+            
+        # Spazio di sicurezza finale per isolare i loghi Streamlit
+        st.markdown("<div class='spazio-sicurezza-footer'>A.S.D. Azzurra Due Carrare - Distinta Live Gara</div>", unsafe_allow_html=True)
         
     except Exception:
         st.warning("⌛ Aggiornamento liste in corso da parte della segreteria...")
         return
-        
