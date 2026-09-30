@@ -12,18 +12,20 @@ from ui_spettatore import render_pagina_spettatori
 # DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
     <style>
-    /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+    /* Rimuove e nasconde il footer "Made with Streamlit", i badge e i menu nativi */
+    footer {visibility: hidden !important;}
+    header {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    .stAppDeployButton {display: none !important;}
+    div[data-testid="stFooter"] {display: none !important;}
+    div[class*="viewerBadge"] {display: none !important;}
+    
+    /* Annulla qualsiasi click residuo o tocco del dito */
     .viewerBadge_container__1QS13, 
-    div[class*="viewerBadge"], 
     a[href*="streamlit.io"], 
-    a[href*="github.com"],
-    footer, 
-    div[data-testid="stFooter"],
-    header,
-    .stAppDeployButton {
-        pointer-events: none !important;   /* Annulla il click/tocco del dito */
-        opacity: 0 !important;             /* Rende il logo invisibile */
+    a[href*="github.com"] {
+        pointer-events: none !important;   
+        opacity: 0 !important;             
         background: transparent !important;
     }
     
