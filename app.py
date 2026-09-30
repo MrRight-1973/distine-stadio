@@ -5,37 +5,44 @@ import pandas as pd
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
-from ui_components import render_info_match, render_download_buttons, svuota_scansione
+from ui_components import render_info_match, render_download_buttons
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 st.title("⚽ Centro Gestione Distinte Gara")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
-# Inizializzazione pulita delle griglie vuote nello stato
-for chiave in ["griglia_casa", "griglia_ospite"]:
-    if chiave not in st.session_state:
-        st.session_state[chiave] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
+# Funzione distruttiva per cancellare completamente la memoria dei vecchi file e dell'AI
+def reset_totale_sessione():
+    for chiave in list(st.session_state.keys()):
+        del st.session_state[chiave]
+    st.rerun()
 
-# Upload File con chiavi uniche e rigide
+# Inizializzazione standard e pulita delle griglie se non esistono nello stato
+if "griglia_casa" not in st.session_state:
+    st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
+if "griglia_ospite" not in st.session_state:
+    st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
+
+# Area di Caricamento File
 col_f1, col_f2 = st.columns(2)
 file_casa = col_f1.file_uploader("Carica distinta LOCALE", type=["png", "jpg", "jpeg"], key="uploader_file_casa")
 file_ospite = col_f2.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="uploader_file_ospite")
 
-# Genera un identificativo unico basato sui nomi dei file per bloccare la cache di Streamlit
-id_scansione_corrente = f"{file_casa.name if file_casa else ''}_{file_ospite.name if file_ospite else ''}"
+# Calcola una firma unica combinando il nome del file e la dimensione in byte per stanare la cache
+firma_file_correnti = f"{file_casa.name}_{file_casa.size if file_casa else 0}__{file_ospite.name}_{file_ospite.size if file_ospite else 0}" if (file_casa and file_ospite) else ""
 
 if file_casa and file_ospite:
-    # Se i dati registrati non corrispondono ai file attuali, forza la richiesta di nuova scansione
-    if st.session_state.get("id_scansione_attiva") != id_scansione_corrente:
+    # Se la firma dei file correnti è diversa da quella memorizzata, resetta forzatamente i dati vecchi
+    if st.session_state.get("firma_scansione_attiva") != firma_file_correnti:
         if "dati_mappati" in st.session_state:
             del st.session_state["dati_mappati"]
 
     if "dati_mappati" not in st.session_state:
         if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary", use_container_width=True):
-            with st.spinner("Scansione in corso delle due distinte separate..."):
+            with st.spinner("Forzatura lettura file fisici in corso..."):
                 try:
-                    # Chiamate OCR isolate e indipendenti per i due file fisici
+                    # Leggiamo i byte freschi direttamente dall'oggetto dell'uploader corrente
                     casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                     ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                     
@@ -46,7 +53,7 @@ if file_casa and file_ospite:
                         "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"],
                         "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]
                     }
-                    st.session_state["id_scansione_attiva"] = id_scansione_corrente
+                    st.session_state["firma_scansione_attiva"] = firma_file_correnti
                     st.session_state["dati_mappati"] = True
                     st.rerun()
                 except Exception as e:
@@ -69,7 +76,7 @@ if "dati_mappati" in st.session_state:
     c_azioni1, c_azioni2 = st.columns(2)
     
     with c_azioni1:
-        if st.button("⚡ Fase 3: Conferma e Genera PDF", type="primary", use_container_width=True):
+        if st.button("⚡ Fase 3: Confirm and Generate PDF", type="primary", use_container_width=True):
             with st.spinner("Generazione del file..."):
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
@@ -83,7 +90,8 @@ if "dati_mappati" in st.session_state:
                 st.success("🎉 Documento A4 pronto!")
                 
     with c_azioni2:
-        if st.button("🔄 Svuota e Ripeti Scansione AI", type="secondary", use_container_width=True):
-            svuota_scansione()
+        # Il pulsante ora esegue una pulizia totale e distruttiva per rimuovere Pettorazza dalla memoria
+        if st.button("🗑️ Svuota Tutto e Ripristina App", type="secondary", use_container_width=True):
+            reset_totale_sessione()
 
 render_download_buttons()
