@@ -88,7 +88,7 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # CORREZIONE: Forza rigidamente il link reale pubblico ufficiale per evitare i reindirizzamenti di share.streamlit.io
+                # CONFIGURAZIONE STRUTTURATA: Forzatura del link esatto
                 link_pubblico_spettatori = "https://streamlit.app"
                 
                 # Salva il file JSON condiviso sul server cloud
@@ -96,8 +96,13 @@ else:
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione del QR Code fisso con parametri espliciti
-                qr = qrcode.QRCode(version=1, box_size=10, border=1)
+                # Generazione ottimizzata del QR Code (Risoluzione e contrasto migliorati per l'ottica mobile)
+                qr = qrcode.QRCode(
+                    version=None,
+                    error_correction=qrcode.constants.ERROR_CORRECT_M,
+                    box_size=12,
+                    border=4,
+                )
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
                 
@@ -105,6 +110,6 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online aggiornata con successo sul link fisso!")
+                st.success("🎉 Distinta online aggiornata con successo! Scarica il PDF e fai una prova di scansione.")
 
-    render_download_buttons()
+render_download_buttons()
