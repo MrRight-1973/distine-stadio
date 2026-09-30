@@ -13,13 +13,6 @@ from ui_spettatore import render_pagina_spettatori
 st.markdown("""
     <style>
     /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
-
-    hide_streamlit_style = """
-            <style>
-            [data-testid="stToolbar"] {visibility: hidden !important;}
-            footer {visibility: hidden !important;}
-            </style>
-            """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
     .viewerBadge_container__1QS13, 
     div[class*="viewerBadge"], 
