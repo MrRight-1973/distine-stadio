@@ -23,11 +23,10 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         Spacer(1, 4)
     ]
     
-    # CORREZIONE: Allineamento e ordine corretto dei dati per evitare testi incrociati o vuoti
     tabella_info_dati = [
-        [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style)],
-        [Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
-        [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
+        [Paragraph(f"<b>CAMPIONATO:</b> {info_gara.get('campionato', '')}", info_style), Paragraph(f"<b>ARBITRO:</b> {info_gara.get('arbitro', '')}", info_style)],
+        [Paragraph(f"<b>DATA GARA:</b> {info_gara.get('data', '')}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara.get('assistente1', '')}", info_style)],
+        [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara.get('assistente2', '')}", info_style)]
     ]
     t_info = Table(tabella_info_dati, colWidths=[225, 225])
     t_info.setStyle(TableStyle([
@@ -106,11 +105,11 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=90, height=90)
         
-t_qr_footer = Table([
-    [img_qr_pdf],
-    [Spacer(1, 3)],
-    [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
-], colWidths=[520]) # <--- Nel file originale era colWidths= senza parentesi quadre o cifre a causa di un troncamento
+        t_qr_footer = Table([
+            [img_qr_pdf],
+            [Spacer(1, 3)],
+            [Paragraph("INQUADRA DA SMARTPHONE PER SCARICARE DIRETTAMENTE IL PDF DELLA DISTINTA", qr_text_style)]
+        ], colWidths=[520])
         
         t_qr_footer.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
