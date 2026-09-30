@@ -134,6 +134,7 @@ else:
             dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["all_ospite"])
 
         st.markdown("---")
+        # ... [Codice precedente del pulsante Fase 3] ...
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
             with st.spinner("Pubblicazione dati e scrittura PDF..."):
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
@@ -152,7 +153,14 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                # Genera i byte del PDF
+                pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                
+                # --- MODIFICA CRUCIALE: Salva il PDF sul server per tutti gli utenti ---
+                with open("distinta_corrente.pdf", "wb") as f_pdf:
+                    f_pdf.write(pdf_bytes)
+                
+                # Mantiene la compatibilità con il tasto download locale della segreteria
+                st.session_state["pdf_interattivo_pronto"] = pdf_bytes
+                
                 st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
-
-    render_download_buttons()
