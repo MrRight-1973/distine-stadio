@@ -145,7 +145,7 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/?embed=true&embed_options=disable_scrolling"
+                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/?embed=true"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
