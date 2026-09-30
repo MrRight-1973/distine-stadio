@@ -73,12 +73,15 @@ def render_pagina_spettatori():
                 st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # --- NUOVO PULSANTE DI DOWNLOAD PER I TIFOSI ---
-        if "pdf_interattivo_pronto" in st.session_state:
+        # --- NUOVO SISTEMA DI DOWNLOAD CONDIVISO PER I TIFOSI ---
+        if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
             st.write("")
+            with open("distinta_corrente.pdf", "rb") as f_pdf:
+                contenuto_pdf = f_pdf.read()
+                
             st.download_button(
                 label="📄 SCARICA DISTINTA UFFICIALE (PDF A4)",
-                data=st.session_state["pdf_interattivo_pronto"],
+                data=contenuto_pdf,
                 file_name=f"distinta_{casa_dati.get('squadra', 'casa')}_{ospite_dati.get('squadra', 'ospite')}.pdf",
                 mime="application/pdf",
                 type="secondary",
