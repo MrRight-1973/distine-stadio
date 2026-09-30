@@ -2,6 +2,7 @@ import streamlit as st
 import qrcode
 import io
 import json
+import os
 import pandas as pd
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
@@ -9,13 +10,33 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# 1. QUESTA DEVE ESSERE SEMPRE LA PRIMA ISTRUZIONE DELLO SCRIPT
+# 1. IMPOSTAZIONE CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽", layout="wide")
+
+# --- NUOVA LOGICA: DOWNLOAD DIRETTO DA QR CODE ---
+# Se l'URL contiene ?download=true, invia il file PDF direttamente al telefono
+if st.query_params.get("download") == "true":
+    if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
+        with open("distinta_corrente.pdf", "rb") as f_pdf:
+            pdf_bytes = f_pdf.read()
+        
+        # Sfrutta i componenti nativi di download senza renderizzare la pagina
+        st.download_button(
+            label="Clicca qui se il download non parte automaticamente",
+            data=pdf_bytes,
+            file_name="distinta_ufficiale_gara.pdf",
+            mime="application/pdf",
+            type="primary"
+        )
+        # Forza un'esecuzione minima e blocca il resto dell'interfaccia visiva
+        st.stop()
+    else:
+        st.warning("⌛ DISTINTA IN AGGIORNAMENTO - Il file PDF non è ancora pronto. Riprova tra qualche istante.")
+        st.stop()
 
 # 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
     <style>
-    /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
     .viewerBadge_container__1QS13, 
     div[class*="viewerBadge"], 
     a[href*="streamlit.io"], 
@@ -24,37 +45,28 @@ st.markdown("""
     div[data-testid="stFooter"],
     header,
     .stAppDeployButton {
-        pointer-events: none !important;   /* Annulla il click/tocco del dito */
-        opacity: 0 !important;             /* Rende il logo invisibile */
+        pointer-events: none !important;
+        opacity: 0 !important;
         background: transparent !important;
     }
-    
-    /* Ottimizzazione dei margini superiori */
-    .block-container {
-        padding-top: 1rem !important;
-    }
+    .block-container { padding-top: 1rem !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Gestione solida della vista tramite Session State
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
-    # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
     if not is_mobile:
         st.markdown("---")
         with st.expander("⚙️ Area Riservata Segreteria PC"):
             password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
             if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
-                # PASSWORD UFFICIALE DI ACCESSO
                 if password_inserita == "azzurra2026":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
@@ -76,13 +88,10 @@ else:
         for chiave in chiavi_da_eliminare:
             if chiave in st.session_state:
                 del st.session_state[chiave]
-        
-        # Rimuove fisicamente il file PDF e il JSON dal server se esistono
         if os.path.exists("distinta_corrente.pdf"):
             os.remove("distinta_corrente.pdf")
         if os.path.exists("distinta_corrente.json"):
             os.remove("distinta_corrente.json")
-            
         st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
         st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
         st.rerun()
@@ -141,33 +150,31 @@ else:
             dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["all_ospite"])
 
         st.markdown("---")
-        # ... [Codice precedente del pulsante Fase 3] ...
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
             with st.spinner("Pubblicazione dati e scrittura PDF..."):
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://streamlit.app"
+                # --- MODIFICA LINK QR CODE: Puntiamo direttamente all'innesco del download ---
+                link_download_diretto = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-                qr.add_data(link_pubblico_spettatori)
+                qr.add_data(link_download_diretto)
                 qr.make(fit=True)
                 
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                # Genera i byte del PDF
                 pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
                 
-                # --- MODIFICA CRUCIALE: Salva il PDF sul server per tutti gli utenti ---
                 with open("distinta_corrente.pdf", "wb") as f_pdf:
                     f_pdf.write(pdf_bytes)
                 
-                # Mantiene la compatibilità con il tasto download locale della segreteria
                 st.session_state["pdf_interattivo_pronto"] = pdf_bytes
-                
-                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
+                st.success("🎉 Distinta pubblicata! Il QR code ora scarica direttamente il PDF A4.")
+
+    render_download_buttons()
