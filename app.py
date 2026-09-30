@@ -4,6 +4,7 @@ import io
 import json
 import os
 import pandas as pd
+import base64  # <--- NUOVA LIBRERIA PER IL DOWNLOAD DIRETTO HTML
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
@@ -11,28 +12,59 @@ from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
 # 1. IMPOSTAZIONE CONFIGURAZIONE PAGINA
-st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="Azzurra Due Carrare - Scarica PDF", page_icon="⚽", layout="wide")
 
-# --- NUOVA LOGICA: DOWNLOAD DIRETTO DA QR CODE ---
-# Se l'URL contiene ?download=true, invia il file PDF direttamente al telefono
+# --- INTERCETTAZIONE E OTTIMIZZAZIONE DOWNLOAD DA QR CODE ---
 if st.query_params.get("download") == "true":
     if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
         with open("distinta_corrente.pdf", "rb") as f_pdf:
             pdf_bytes = f_pdf.read()
         
-        # Sfrutta i componenti nativi di download senza renderizzare la pagina
-        st.download_button(
-            label="Clicca qui se il download non parte automaticamente",
-            data=pdf_bytes,
-            file_name="distinta_ufficiale_gara.pdf",
-            mime="application/pdf",
-            type="primary"
-        )
-        # Forza un'esecuzione minima e blocca il resto dell'interfaccia visiva
+        # Codifica il PDF in Base64 per forzare il browser del telefono a scaricarlo
+        b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+        
+        # Interfaccia mobile gigante a tutto schermo per il tifoso
+        st.markdown(f"""
+            <style>
+            .stApp {{ background-color: #F0F4F8; }}
+            .box-download {{
+                text-align: center;
+                margin-top: 15vh;
+                padding: 30px;
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            }}
+            .bottone-click {{
+                display: block;
+                width: 100%;
+                background-color: #2B6CB0;
+                color: white !important;
+                text-decoration: none !important;
+                padding: 18px;
+                font-size: 20px;
+                font-weight: bold;
+                border-radius: 10px;
+                margin-top: 25px;
+                box-shadow: 0 4px 12px rgba(43, 108, 176, 0.4);
+            }}
+            </style>
+            <div class='box-download'>
+                <h2 style='color: #1A365D;'>⚽ AZZURRA DUE CARRARE</h2>
+                <p style='color: #4A5568; font-size: 16px;'>La distinta ufficiale di gara in formato PDF A4 è pronta.</p>
+                <a href="data:application/pdf;base64,{b64_pdf}" download="distinta_ufficiale_gara.pdf" class="bottone-click">
+                    📥 PREMI QUI PER SCARICARE IL PDF
+                </a>
+                <p style='color: #A0AEC0; font-size: 12px; margin-top: 20px;'>Il file verrà salvato nella cartella Download del tuo smartphone.</p>
+            </div>
+        """, unsafe_allow_html=True)
         st.stop()
     else:
-        st.warning("⌛ DISTINTA IN AGGIORNAMENTO - Il file PDF non è ancora pronto. Riprova tra qualche istante.")
+        st.warning("⌛ DISTINTA IN AGGIORNAMENTO - La segreteria sta compilando i dati. Riprova tra qualche istante.")
         st.stop()
+
+# 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
+# ... [Il resto del codice di app.py rimane esattamente identico a prima] ...
 
 # 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
