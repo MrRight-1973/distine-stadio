@@ -4,11 +4,7 @@ from openai import OpenAI
 from utils import encode_image, pulisci_testo
 
 def estrai_solo_anno(testo_anno):
-    """
-    Cerca una sequenza di 4 cifre consecutive (es. 2005) nel testo.
-    Se l'AI ha inserito una data intera (es. 12/04/2005 o 05-06-2002),
-    estrae e restituisce solo l'anno a 4 cifre.
-    """
+    """Estrae solo la sequenza di 4 cifre consecutive dell'anno (es. 2005)."""
     if not testo_anno:
         return ""
     testo_stringa = str(testo_anno).strip()
@@ -18,7 +14,7 @@ def estrai_solo_anno(testo_anno):
     return ""
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI sfruttando gli Structured Outputs (strict mode) con post-processing di precisione."""
+    """Invia la foto a OpenAI in Strict Mode con controlli di tolleranza avanzati per Capitani/Vice."""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
@@ -64,10 +60,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        response_format={
-            "type": "json_schema",
-            "json_schema": json_schema_strict
-        },
+        response_format={"type": "json_schema", "json_schema": json_schema_strict},
         messages=[
             {"role": "system", "content": prompt_sistema},
             {
@@ -81,16 +74,14 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content.strip()
+    risultato_grezzo = response.choices.message.content.strip()
     dati = json.loads(risultato_grezzo)
     
-    # Pulizia metadati generali
     dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
     dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
     dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
     dati["data"] = pulisci_testo(dati.get("data", "NON INDICATO"))
     
-    # Variabili di controllo per evitare duplicati di Capitano e Vice via codice
     capitano_assegnato = False
     vice_assegnato = False
     
@@ -99,27 +90,32 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         try:
             num = int(g.get("numero", 0))
             if 1 <= num <= 20:
-                nome_pulito = pulisci_testo(g.get("cognome_nome", ""))
+                nome_originale = str(g.get("cognome_nome", "")).upper()
                 
-                # Correzione forzata dell'anno (estirpa le date intere nel caso l'AI fallisse il prompt)
-                anno_pulito = estrai_solo_anno(g.get("anno_nascita", ""))
+                # --- ALGORITMO DI FALLBACK TESTUALE ---
+                # Se l'AI ha mancato il flag booleano ma ha scritto il tag nel nome, lo intercettiamo
+                is_cap_testo = bool(re.search(r'\b(C|CAP|CAPITANO)\b', nome_originale)) or g.get("is_capitano")
+                is_vice_testo = bool(re.search(r'\b(VC|VICE|VICE-CAPITANO)\b', nome_originale)) or g.get("is_vice")
                 
-                # Gestione rigorosa dei ruoli: assegna il tag solo se non è già stato assegnato prima
-                if g.get("is_capitano") and not capitano_assegnato:
+                # Puliamo i vecchi tag dal nome per evitare stringhe disordinate come "ROSSI (C) (C)"
+                nome_pulito = re.sub(r'[\(\[\{]?(C|VC|CAP|CAPITANO|VICE)[\)\]\}]?', '', nome_originale)
+                nome_pulito = pulisci_testo(nome_pulito)
+                
+                # Assegnazione rigorosa senza duplicati
+                if is_cap_testo and not capitano_assegnato:
                     nome_pulito += " (C)"
                     capitano_assegnato = True
-                elif g.get("is_vice") and not vice_assegnato:
+                elif is_vice_testo and not vice_assegnato:
                     nome_pulito += " (VC)"
                     vice_assegnato = True
                     
                 giocatori_estratti[num] = {
                     "cognome_nome": nome_pulito,
-                    "anno_nascita": anno_pulito
+                    "anno_nascita": estrai_solo_anno(g.get("anno_nascita", ""))
                 }
         except Exception:
             continue
             
-    # Rigenerazione della lista fissa a 20 righe per Streamlit
     lista_20_giocatori = []
     for i in range(1, 21):
         if i in giocatori_estratti:
