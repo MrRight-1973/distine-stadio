@@ -6,25 +6,6 @@ def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
     st.markdown("""
         <style>
-        /* 1. ABBATTIMENTO DEI CONTENITORI SPECIFICI DI STREAMLIT CLOUD */
-        [data-testid="stStatusWidget"],
-        [data-testid="stFooter"],
-        [data-testid="stToolbar"],
-        [data-testid="stDecoration"],
-        div[class*="viewerBadge"],
-        div[class*="StatusWidget"],
-        div[class*="StyledEmbedControlBar"] {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            height: 0px !important;
-            max-height: 0px !important;
-            width: 0px !important;
-            overflow: hidden !important;
-            pointer-events: none !important;
-        }
-
-        /* 2. STILI GRAFICI DELLA PAGINA */
         .main { background-color: #F0F4F8; }
         .titolo-match { text-align: center; color: #1A365D; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
         .info-match { text-align: center; color: #4A5568; font-size: 14px; margin-bottom: 20px; }
@@ -36,9 +17,20 @@ def render_pagina_spettatori():
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
         
-        /* CUSCINETTO PROTETTIVO STANDARD */
+        /* 🛡️ IL MURO INVISIBILE ANTI-FULLSCREEN */
+        .blocco-anti-fullscreen {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 150px;         /* Copre abbondantemente l'angolo del tasto */
+            height: 50px;         /* Altezza di sicurezza */
+            background-color: transparent !important;
+            z-index: 999999 !important;   /* Si posiziona SOPRA al tasto di Streamlit */
+            pointer-events: auto !important; /* Cattura il tocco del dito impedendogli di passare sotto */
+        }
+
         .spazio-sicurezza-footer {
-            height: 60px;
+            height: 80px;
             margin-top: 20px;
             text-align: center;
             color: #A0AEC0;
@@ -47,6 +39,9 @@ def render_pagina_spettatori():
             padding-top: 15px;
         }
         </style>
+        
+        <!-- Inietta il muro invisibile fisicamente nella pagina -->
+        <div class="blocco-anti-fullscreen"></div>
     """, unsafe_allow_html=True)
     
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
