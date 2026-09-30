@@ -9,10 +9,9 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# ABBATTIMENTO STRUTTURALE DEI CONTENITORI SPECIFICI STREAMLIT
+# INTERCETTAZIONE E APPIATTIMENTO DEI BADGE DI STREAMLIT CLOUD
 st.markdown("""
     <style>
-    /* Intercetta i nodi di rendering profondi di Streamlit Cloud */
     [data-testid="stStatusWidget"],
     [data-testid="stFooter"],
     [data-testid="stToolbar"],
@@ -33,8 +32,6 @@ st.markdown("""
         pointer-events: none !important;
         overflow: hidden !important;
     }
-    
-    /* Ottimizzazione dei margini superiori ed inferiori */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -149,7 +146,6 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # Ripristiniamo il link normale stabile senza frammenti bloccanti
                 link_pubblico_spettatori = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
