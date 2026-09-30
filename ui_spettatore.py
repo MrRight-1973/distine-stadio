@@ -3,7 +3,6 @@ import json
 import os
 
 def render_pagina_spettatori():
-    """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
 st.markdown("""
     <style>
     /* 1. ABBATTIMENTO DEI CONTENITORI SPECIFICI DI STREAMLIT CLOUD */
