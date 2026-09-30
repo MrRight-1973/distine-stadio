@@ -1,5 +1,13 @@
 import streamlit as st
 
+def svuota_scansione():
+    """Cancella i dati mappati per consentire una nuova lettura pulita"""
+    if "dati_mappati" in st.session_state:
+        del st.session_state["dati_mappati"]
+    if "pdf_interattivo_pronto" in st.session_state:
+        del st.session_state["pdf_interattivo_pronto"]
+    st.rerun()
+
 def render_info_match(info):
     """Mostra i campi di input della terna arbitrale e informazioni gara"""
     st.subheader("🏁 Informazioni Generali Match (Terna Ufficiale)")
