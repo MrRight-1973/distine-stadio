@@ -32,22 +32,29 @@ with col_f2:
 
 if file_casa and file_ospite and "dati_mappati" not in st.session_state:
     if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
-        with st.spinner("L'AI sta leggendo le distinte..."):
+        with st.spinner("L'AI sta analizzando i documenti in parallelo..."):
             try:
-                casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
+                # Esecuzione mirata passando esplicitamente i ruoli separati all'estrattore
+                casa_raw = analizza_distinta(file_casa, "LOCALE / CASA", api_key_openai)
                 ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
                 
+                # Popolamento isolato delle griglie
                 st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
                 st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
+                
+                # Salvataggio separato e accurato delle macro informazioni
                 st.session_state["macro_info"] = {
-                    "campionato": casa_raw["campionato"], "data": casa_raw["data"],
-                    "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"],
-                    "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]
+                    "campionato": casa_raw["campionato"], 
+                    "data": casa_raw["data"],
+                    "squadra_casa": casa_raw["squadra"], 
+                    "all_casa": casa_raw["allenatore"],
+                    "squadra_ospite": ospite_raw["squadra"], 
+                    "all_ospite": ospite_raw["allenatore"]
                 }
                 st.session_state["dati_mappati"] = True
                 st.rerun()
             except Exception as e:
-                st.error(f"Errore durante l'analisi visiva: {e}")
+                st.error(f"Errore durante l'analisi visiva programmata: {e}")
 
 # FASE 2: Modifica e Funzioni di Shift (Slittamento)
 if "dati_mappati" in st.session_state:
