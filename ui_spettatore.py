@@ -6,6 +6,15 @@ def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
     st.markdown("""
         <style>
+        /* BLOCCO AGGIUNTIVO PER EMERGENZA LOGO MOBILE */
+        [data-testid="stStatusWidget"], [data-testid="stFooter"], footer, .stFooter, div[class*="viewerBadge"], header, .stAppDeployButton {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0px !important;
+        }
+        
+        /* I tuoi stili originali rimangono qui sotto */
         .main { background-color: #F0F4F8; }
         .titolo-match { text-align: center; color: #1A365D; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
         .info-match { text-align: center; color: #4A5568; font-size: 14px; margin-bottom: 20px; }
@@ -17,7 +26,7 @@ def render_pagina_spettatori():
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
         
-        /* CUSCINETTO PROTETTIVO: Spinge i giocatori verso l'alto isolando i loghi Streamlit in un'area vuota */
+        /* CUSCINETTO PROTETTIVO */
         .spazio-sicurezza-footer {
             height: 120px;
             margin-top: 20px;
