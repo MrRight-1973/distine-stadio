@@ -9,26 +9,31 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
+# RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
     <style>
-    /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
-    .viewerBadge_container__1QS13, 
-    div[class*="viewerBadge"], 
-    a[href*="streamlit.io"], 
-    a[href*="github.com"],
     footer, 
-    div[data-testid="stFooter"],
-    header,
+    div[data-testid="stFooter"], 
+    .stFooter,
+    div[class*="viewerBadge"], 
+    div[class*="StyledEmbedControlBar"],
+    .viewerBadge_container__1QS13,
+    #MainMenu, 
+    header, 
     .stAppDeployButton {
-        pointer-events: none !important;   /* Annulla il click/tocco del dito */
-        opacity: 0 !important;             /* Rende il logo invisibile */
-        background: transparent !important;
+        visibility: hidden !important;
+        display: none !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        height: 0px !important;
     }
-    
-    /* Ottimizzazione dei margini superiori */
+    .stApp {
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
+    }
     .block-container {
         padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
