@@ -9,39 +9,28 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# INIEZIONE DI SICUREZZA CSS + JAVASCRIPT PER RIMUOVERE QUALSIASI LOGO STREAMLIT/GITHUB (ANCHE MOBILE)
+# DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
     <style>
-    /* Nasconde tutto ciò che è intercettabile via CSS */
-    #MainMenu, header, footer, .stAppDeployButton, div[data-testid="stHeader"], div[data-testid="stFooter"] {
-        visibility: hidden !important;
-        display: none !important;
-        height: 0 !important;
+    /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
+    .viewerBadge_container__1QS13, 
+    div[class*="viewerBadge"], 
+    a[href*="streamlit.io"], 
+    a[href*="github.com"],
+    footer, 
+    div[data-testid="stFooter"],
+    header,
+    .stAppDeployButton {
+        pointer-events: none !important;   /* Annulla il click/tocco del dito */
+        opacity: 0 !important;             /* Rende il logo invisibile */
+        background: transparent !important;
     }
-    .block-container { padding-top: 1rem !important; }
-    </style>
     
-    <script>
-    // Funzione ciclica che distrugge i loghi in basso a destra dello smartphone penetrando nello Shadow DOM
-    function rimuoviLoghiFissi() {
-        // Cerca e distrugge i badge Streamlit tradizionali
-        const elementiMobili = document.querySelectorAll('div[class*="viewerBadge"], .viewerBadge_container__1QS13, a[href*="streamlit.io"]');
-        elementiMobili.forEach(el => el.remove());
-        
-        // Cerca all'interno di tutti i nodi della pagina per stanare i badge nascosti
-        const tuttiElementi = document.getElementsByTagName('*');
-        for (let i = 0; i < tuttiElementi.length; i++) {
-            let el = tuttiElementi[i];
-            if (el.shadowRoot) {
-                let badgeNascosto = el.shadowRoot.querySelectorAll('div[class*="viewerBadge"], a[href*="streamlit.io"], a[href*="github.com"]');
-                badgeNascosto.forEach(b => b.remove());
-            }
-        }
+    /* Ottimizzazione dei margini superiori */
+    .block-container {
+        padding-top: 1rem !important;
     }
-    // Esegue il controllo ogni mezzo secondo per intercettare i loghi al caricamento dinamico
-    setInterval(rimuoviLoghiFissi, 500);
-    window.addEventListener('load', rimuoviLoghiFissi);
-    </script>
+    </style>
 """, unsafe_allow_html=True)
 
 # Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
