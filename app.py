@@ -76,6 +76,13 @@ else:
         for chiave in chiavi_da_eliminare:
             if chiave in st.session_state:
                 del st.session_state[chiave]
+        
+        # Rimuove fisicamente il file PDF e il JSON dal server se esistono
+        if os.path.exists("distinta_corrente.pdf"):
+            os.remove("distinta_corrente.pdf")
+        if os.path.exists("distinta_corrente.json"):
+            os.remove("distinta_corrente.json")
+            
         st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
         st.session_state["griglia_ospite"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
         st.rerun()
