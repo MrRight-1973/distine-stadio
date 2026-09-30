@@ -148,32 +148,41 @@ else:
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
             with st.spinner("Pubblicazione dati e scrittura PDF..."):
+                # Recupera le griglie aggiornate dai data editor
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
+                # Unisce tutte le informazioni correnti
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 
-                # 1. Salva il JSON interno per la segreteria
+                # 1. Salva il JSON interno di backup per la segreteria
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # 2. GENERAZIONE DEL FILE HTML PURO PER I TIFOSI (SENZA STREAMLIT)
+                # 2. Genera il codice HTML puro per i tifosi (senza loghi né fullscreen)
                 from ui_spettatore import genera_html_tifosi
                 codice_html = genera_html_tifosi(pacchetto_gara)
                 with open("distinta.html", "w", encoding="utf-8") as f:
                     f.write(codice_html)
                 
-                # 3. IMPOSTA IL LINK DELLE GITHUB PAGES NEL QR CODE
-                # Sostituisci questo indirizzo con il link effettivo delle tue GitHub Pages abilitate al punto precedente
+                # 3. Imposta il link delle GitHub Pages nel QR Code
+                # NOTA: Sostituisci "TUO-UTENTE" e "NOME-REPO" con i tuoi dati reali di GitHub
                 link_pubblico_spettatori = "https://github.io"
                 
-                # Generazione del QR code
+                # 4. Generazione fisica del QR Code in memoria
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
                 
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
+                qr_bytes = buf_qr.getvalue()
                 
-                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online pubblicata! I tifosi vedranno la pagina web statica super-leggera senza loghi né tasti fullscreen.")
+                # 5. Genera il PDF A4 passandogli i dati corretti e i byte del QR Code appena creato
+                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, qr_bytes)
+                
+                st.success("🎉 Distinta online pubblicata! File PDF con QR Code generato correttamente.")
+                st.rerun() # Forza l'app a rinfrescarsi per mostrare SUBITO il pulsante di download del PDF
+
+    # Mostra l'unico pulsante ufficiale per scaricare il PDF generato
+    render_download_buttons()
