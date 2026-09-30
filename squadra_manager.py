@@ -28,7 +28,8 @@ def render_colonna_squadra(label_titolo, chiave_griglia, default_nome, default_a
         use_container_width=True
     )
     
-    c1, c2 = st.columns()
+    # CORREZIONE: Inserito l'argomento 2 per generare due colonne bilanciate
+    c1, c2 = st.columns(2)
     with c1:
         riga_scelta = st.selectbox("🎯 Riga", options=list(range(1, 21)), index=12, key=f"sel_{chiave_griglia}")
     with c2:
