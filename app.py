@@ -12,28 +12,31 @@ from ui_spettatore import render_pagina_spettatori
 # RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
     <style>
-    footer, 
-    div[data-testid="stFooter"], 
+    /* Intercetta il contenitore del badge mobile e lo distrugge */
+    [data-testid="stStatusWidget"],
+    [data-testid="stFooter"],
+    footer,
     .stFooter,
-    div[class*="viewerBadge"], 
+    div[class*="viewerBadge"],
     div[class*="StyledEmbedControlBar"],
-    .viewerBadge_container__1QS13,
-    #MainMenu, 
-    header, 
+    header,
     .stAppDeployButton {
-        visibility: hidden !important;
         display: none !important;
+        visibility: hidden !important;
         opacity: 0 !important;
-        pointer-events: none !important;
         height: 0px !important;
+        max-height: 0px !important;
+        pointer-events: none !important;
     }
+    
+    /* Forza l'applicazione a non tenere lo spazio vuoto protettivo in fondo */
     .stApp {
         margin-bottom: 0px !important;
         padding-bottom: 0px !important;
     }
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-bottom: 0rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
