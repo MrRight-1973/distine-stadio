@@ -16,18 +16,24 @@ def render_pagina_spettatori():
         .num-maglia { font-weight: bold; color: #2B6CB0; width: 25px; }
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
-        
-        /* PROTEZIONE SPECIFICA PER SMARTPHONE (Rimuove loghi e scritte in basso a destra) */
-        .viewerBadge_container__1QS13, 
-        div[class*="viewerBadge"], 
-        a[href*="streamlit.io"], 
-        footer, 
-        div[data-testid="stFooter"] {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-        }
         </style>
+        
+        <script>
+        function rimuoviLoghiFissiMobile() {
+            const elMobili = document.querySelectorAll('div[class*="viewerBadge"], .viewerBadge_container__1QS13, a[href*="streamlit.io"]');
+            elMobili.forEach(el => el.remove());
+            
+            const allTags = document.getElementsByTagName('*');
+            for (let i = 0; i < allTags.length; i++) {
+                let el = allTags[i];
+                if (el.shadowRoot) {
+                    let nascosti = el.shadowRoot.querySelectorAll('div[class*="viewerBadge"], a[href*="streamlit.io"], a[href*="github.com"]');
+                    nascosti.forEach(b => b.remove());
+                }
+            }
+        }
+        setInterval(rimuoviLoghiFissiMobile, 500);
+        </script>
     """, unsafe_allow_html=True)
     
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
