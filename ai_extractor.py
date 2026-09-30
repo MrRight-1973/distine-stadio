@@ -1,25 +1,38 @@
 import json
+import re
 from openai import OpenAI
 from utils import encode_image, pulisci_testo
 
+def estrai_solo_anno(testo_anno):
+    """
+    Cerca una sequenza di 4 cifre consecutive (es. 2005) nel testo.
+    Se l'AI ha inserito una data intera (es. 12/04/2005 o 05-06-2002),
+    estrae e restituisce solo l'anno a 4 cifre.
+    """
+    if not testo_anno:
+        return ""
+    testo_stringa = str(testo_anno).strip()
+    match = re.search(r'\b(19\d{2}|20\d{2})\b', testo_stringa)
+    if match:
+        return match.group(1)
+    return ""
+
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a OpenAI sfruttando gli Structured Outputs (strict mode) per la massima precisione."""
+    """Invia la foto a OpenAI sfruttando gli Structured Outputs (strict mode) con post-processing di precisione."""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
-    # Prompt di sistema potenziato per evitare scambi di squadra e isolare i ruoli
     prompt_sistema = (
-        f"Sei un assistente esperto di calcio LND. Stai analizzando la distinta della squadra {ruolo_squadra}. "
-        "Presta la massima attenzione: non confondere la squadra ospitante con la squadra ospite. "
-        "Estrai i dati relativi unicamente alla distinta caricata.\n"
-        "COMPITO AGGIUNTIVO SUI GIOCATORI:\n"
-        "Identifica se vicino al nome di un giocatore è presente la lettera (C) o la parola 'Capitano', "
-        "oppure (VC) / 'Vice'. Imposta il rispettivo campo booleano a true."
+        f"Sei un assistente esperto di calcio LND. Stai analizzando la distinta della squadra {ruolo_squadra}.\n"
+        "REGOLE TASSATIVE DI PRECISIONE:\n"
+        "1. ANNO DI NASCITA: Estrai UNICAMENTE l'anno di nascita a 4 cifre (es. '2004'). Non inserire MAI la data completa (GG/MM/AAAA).\n"
+        "2. CAPITANO E VICE: Identifica se vicino al nome è presente (C)/'Capitano' o (VC)/'Vice'. "
+        "Può esserci AL MASSIMO un solo capitano (is_capitano: true) e un solo vice capitano (is_vice: true) per tutta la squadra. "
+        "Non duplicare mai questi ruoli."
     )
     
-    # Definizione del JSON Schema Strict per forzare l'accuratezza del modello
     json_schema_strict = {
-        "name": "estrazione_distinta_gara",
+        "name": "estrazione_distinta_gara_regolata",
         "strict": True,
         "schema": {
             "type": "object",
@@ -51,7 +64,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        # Passiamo da semplice json_object a un json_schema con strict attivo
         response_format={
             "type": "json_schema",
             "json_schema": json_schema_strict
@@ -61,7 +73,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Estrai con assoluta precisione la distinta per la squadra {ruolo_squadra}."},
+                    {"type": "text", "text": f"Estrai i dati della squadra {ruolo_squadra} rispettando i vincoli di anno e ruoli."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -72,13 +84,16 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     risultato_grezzo = response.choices[0].message.content.strip()
     dati = json.loads(risultato_grezzo)
     
-    # Pulizia dati standard
+    # Pulizia metadati generali
     dati["squadra"] = pulisci_testo(dati.get("squadra", "N.D."))
     dati["allenatore"] = pulisci_testo(dati.get("allenatore", "NON INDICATO"))
     dati["campionato"] = pulisci_testo(dati.get("campionato", "NON INDICATO"))
     dati["data"] = pulisci_testo(dati.get("data", "NON INDICATO"))
     
-    # Mappatura e formattazione con suffisso grafico temporaneo (es. ROSSI ANDREA (C))
+    # Variabili di controllo per evitare duplicati di Capitano e Vice via codice
+    capitano_assegnato = False
+    vice_assegnato = False
+    
     giocatori_estratti = {}
     for g in dati.get("giocatori", []):
         try:
@@ -86,20 +101,25 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             if 1 <= num <= 20:
                 nome_pulito = pulisci_testo(g.get("cognome_nome", ""))
                 
-                # Appendi visivamente il ruolo se intercettato dall'AI
-                if g.get("is_capitano"):
+                # Correzione forzata dell'anno (estirpa le date intere nel caso l'AI fallisse il prompt)
+                anno_pulito = estrai_solo_anno(g.get("anno_nascita", ""))
+                
+                # Gestione rigorosa dei ruoli: assegna il tag solo se non è già stato assegnato prima
+                if g.get("is_capitano") and not capitano_assegnato:
                     nome_pulito += " (C)"
-                elif g.get("is_vice"):
+                    capitano_assegnato = True
+                elif g.get("is_vice") and not vice_assegnato:
                     nome_pulito += " (VC)"
+                    vice_assegnato = True
                     
                 giocatori_estratti[num] = {
                     "cognome_nome": nome_pulito,
-                    "anno_nascita": str(g.get("anno_nascita", ""))
+                    "anno_nascita": anno_pulito
                 }
         except Exception:
             continue
             
-    # Garantisce la struttura intatta da 1 a 20 righe per la griglia Streamlit
+    # Rigenerazione della lista fissa a 20 righe per Streamlit
     lista_20_giocatori = []
     for i in range(1, 21):
         if i in giocatori_estratti:
