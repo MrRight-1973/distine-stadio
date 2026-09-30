@@ -9,7 +9,10 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
+# 1. QUESTA DEVE ESSERE SEMPRE LA PRIMA ISTRUZIONE DELLO SCRIPT
+st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽", layout="wide")
+
+# 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
     <style>
     /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
@@ -59,8 +62,6 @@ if st.session_state["vista_attiva"] == "pubblica":
                     st.error("❌ Password errata. Accesso negato.")
 else:
     # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
-    st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
-    
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
         st.session_state["vista_attiva"] = "pubblica"
         st.rerun()
@@ -138,7 +139,7 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://distine-stadio.streamlit.app/"
+                link_pubblico_spettatori = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
