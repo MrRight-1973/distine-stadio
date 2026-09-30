@@ -16,7 +16,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=2, spaceAfter=4)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
-    qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=6.5, leading=8, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
+    qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=7.5, leading=10, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
     
     elementi_sinistra = [
         Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style),
@@ -32,46 +32,21 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     t_info.setStyle(TableStyle([('BOTTOMPADDING', (0,0), (-1,-1), 1.5), ('TOPPADDING', (0,0), (-1,-1), 1.5)]))
     elementi_sinistra.append(t_info)
     
-    # LETTURA LOCALE DEL LOGO: Cerca il file caricato sul tuo GitHub
+    # Lettura locale del logo societario in alto a destra
     img_logo = None
     nome_file_logo = "logo_azzurra.png"
-    
     if os.path.exists(nome_file_logo):
         try:
             img_logo = RLImage(nome_file_logo, width=45, height=45)
         except Exception:
             img_logo = None
 
-    # Costruzione dell'angolo destro (Logo + eventuale QR Code)
-    blocco_destra_celle = []
-    riga_immagini = []
-    riga_testi = []
-    col_widths = []
-    
+    # Composizione dell'intestazione superiore
     if img_logo:
-        riga_immagini.append(img_logo)
-        riga_testi.append(Paragraph("", qr_text_style))
-        col_widths.append(45)
-        
-    if qr_code_bytes:
-        buf_qr = io.BytesIO(qr_code_bytes)
-        img_qr_pdf = RLImage(buf_qr, width=45, height=45)
-        riga_immagini.append(img_qr_pdf)
-        riga_testi.append(Paragraph("INQUADRA", qr_text_style))
-        col_widths.append(45)
-
-    if riga_immagini:
-        blocco_destra_celle.append(riga_immagini)
-        blocco_destra_celle.append(riga_testi)
-        t_blocco_destra = Table(blocco_destra_celle, colWidths=col_widths)
-        t_blocco_destra.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0)
-        ]))
-        t_header = Table([[elementi_sinistra, t_blocco_destra]], colWidths=[450, sum(col_widths)])
+        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[495, 45])
+        t_header.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 100])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[495, 45])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -81,6 +56,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     story.append(t_header)
     story.append(Spacer(1, 6))
     
+    # Funzione interna per strutturare la griglia dei 20 giocatori
     def genera_tabella_squadra(dati):
         elementi_squadra = [
             Paragraph(f"<b>{dati.get('squadra', 'SQUADRA')}</b>", team_title_style),
@@ -96,7 +72,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
                 Paragraph(str(g.get('ANNO', '')), normal_style)
             ])
             
-        t = Table(tabella_dati, colWidths=[25, 195, 40])
+        t = Table(tabella_dati, colWidths=[25, 185, 40])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2.2),
@@ -107,14 +83,36 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         elementi_squadra.append(t)
         return elementi_squadra
 
-    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 30, 260])
+    # Inserimento delle due tabelle affiancate
+    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[250, 40, 250])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
         ('RIGHTPADDING', (0,0), (-1,-1), 0)
     ]))
-    
     story.append(macro_tabella)
+    
+    # STRUTTURA DEL BLOCCO QR CODE IN FONDO
+    if qr_code_bytes:
+        story.append(Spacer(1, 15))
+        buf_qr = io.BytesIO(qr_code_bytes)
+        # Dimensione del QR code aumentata a 90x90 punti per renderlo più grande e leggibile
+        img_qr_pdf = RLImage(buf_qr, width=90, height=90)
+        
+        t_qr_footer = Table([
+            [img_qr_pdf],
+            [Spacer(1, 3)],
+            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE AL GESTIONALE UFFICIALE", qr_text_style)]
+        ], colWidths=[540])
+        
+        t_qr_footer.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0)
+        ]))
+        story.append(t_qr_footer)
+        
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
