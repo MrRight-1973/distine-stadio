@@ -42,7 +42,6 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
-    # Istruzione dinamica e severa basata sul ruolo della squadra per evitare scambi di dati
     focus_ruolo = (
         "ATTENZIONE: Stai analizzando la SQUADRA IN OSPITE (colonna/sezione OSPITI o FUORI CASA). "
         "Ignora completamente i giocatori della squadra di casa se presenti nella stessa immagine."
@@ -90,7 +89,14 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    dati = json.loads(response.choices.message.content.strip())
+    risultato_grezzo = response.choices[0].message.content.strip()
+    
+    # PROTEZIONE DA MARKDOWN CORRETTA: Rimuove i blocchi ```json ... ``` se presenti
+    if risultato_grezzo.startswith("```"):
+        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
+        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
+        
+    dati = json.loads(risultato_grezzo)
     
     # Pulizia macro informazioni
     dati["squadra"] = pulisci_testo(dati.get("squadra", ""))
