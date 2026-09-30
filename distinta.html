@@ -25,13 +25,11 @@
     </div>
 
     <script>
-        // Questa funzione scarica i dati aggiornati dalla segreteria senza usare Streamlit
+        // Aggiornato per leggere dal canale pubblico kvdb senza blocchi o autenticazioni
         async function caricaDistinta() {
             try {
-// Cambia questa riga dentro il file distinta.html su GitHub per leggere dal nuovo database funzionante
-const response = await fetch('https://jsonbin.io');
-const resData = await response.json();
-const dati = resData.record; // Estrae il record dei giocatori
+                const response = await fetch('https://kvdb.io');
+                const dati = await response.json();
                 
                 let html = `
                     <div class="titolo-match">⚽ AZZURRA DUE CARRARE</div>
@@ -60,7 +58,7 @@ const dati = resData.record; // Estrae il record dei giocatori
                 html += `</div>`;
                 document.getElementById('contenuto-app').innerHTML = html;
             } catch (error) {
-                document.getElementById('contenuto-app').innerHTML = '<div class="caricamento">⌛ Distinta in corso di pubblicazione da parte della segreteria...</div>';
+                document.getElementById('contenuto-app').innerHTML = '<div class="caricamento">⌛ Distinta in corso di caricamento da parte della segreteria...</div>';
             }
         }
         caricaDistinta();
