@@ -8,33 +8,49 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons, svuota_scansione
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
-st.title("⚽ Centro Gestione Distinte Gara ")
+st.title("⚽ Centro Gestione Distinte Gara")
 
 api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
+# Inizializzazione pulita delle griglie vuote nello stato
 for chiave in ["griglia_casa", "griglia_ospite"]:
     if chiave not in st.session_state:
         st.session_state[chiave] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
 
+# Upload File con chiavi uniche e rigide
 col_f1, col_f2 = st.columns(2)
-file_casa = col_f1.file_uploader("Carica distinta LOCALE", type=["png", "jpg", "jpeg"], key="casa")
-file_ospite = col_f2.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="ospite")
+file_casa = col_f1.file_uploader("Carica distinta LOCALE", type=["png", "jpg", "jpeg"], key="uploader_file_casa")
+file_ospite = col_f2.file_uploader("Carica distinta OSPITE", type=["png", "jpg", "jpeg"], key="uploader_file_ospite")
 
-if file_casa and file_ospite and "dati_mappati" not in st.session_state:
-    if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary"):
-        with st.spinner("Estrazione dati ad alta precisione in corso..."):
-            casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
-            ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
-            
-            st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
-            st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
-            st.session_state["macro_info"] = {
-                "campionato": casa_raw["campionato"], "data": casa_raw["data"], 
-                "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"],
-                "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]
-            }
-            st.session_state["dati_mappati"] = True
-            st.rerun()
+# Genera un identificativo unico basato sui nomi dei file per bloccare la cache di Streamlit
+id_scansione_corrente = f"{file_casa.name if file_casa else ''}_{file_ospite.name if file_ospite else ''}"
+
+if file_casa and file_ospite:
+    # Se i dati registrati non corrispondono ai file attuali, forza la richiesta di nuova scansione
+    if st.session_state.get("id_scansione_attiva") != id_scansione_corrente:
+        if "dati_mappati" in st.session_state:
+            del st.session_state["dati_mappati"]
+
+    if "dati_mappati" not in st.session_state:
+        if st.button("🔍 Fase 1: Esegui Scansione AI delle Immagini", type="primary", use_container_width=True):
+            with st.spinner("Scansione in corso delle due distinte separate..."):
+                try:
+                    # Chiamate OCR isolate e indipendenti per i due file fisici
+                    casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
+                    ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
+                    
+                    st.session_state["griglia_casa"] = pd.DataFrame(casa_raw["giocatori"]).set_index("N°")
+                    st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
+                    st.session_state["macro_info"] = {
+                        "campionato": casa_raw["campionato"], "data": casa_raw["data"], 
+                        "squadra_casa": casa_raw["squadra"], "all_casa": casa_raw["allenatore"],
+                        "squadra_ospite": ospite_raw["squadra"], "all_ospite": ospite_raw["allenatore"]
+                    }
+                    st.session_state["id_scansione_attiva"] = id_scansione_corrente
+                    st.session_state["dati_mappati"] = True
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore nell'estrazione: {e}")
 
 if "dati_mappati" in st.session_state:
     st.markdown("---")
@@ -50,8 +66,6 @@ if "dati_mappati" in st.session_state:
         dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["squadra_ospite"], inf["all_ospite"])
 
     st.markdown("---")
-    
-    # MODIFICA: Creazione di due colonne affiancate per le azioni finali
     c_azioni1, c_azioni2 = st.columns(2)
     
     with c_azioni1:
