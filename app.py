@@ -4,26 +4,26 @@ import io
 import json
 import os
 import pandas as pd
-import base64  # <--- NUOVA LIBRERIA PER IL DOWNLOAD DIRETTO HTML
+import base64
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# 1. IMPOSTAZIONE CONFIGURAZIONE PAGINA
-st.set_page_config(page_title="Azzurra Due Carrare - Scarica PDF", page_icon="⚽", layout="wide")
+# 1. QUESTA DEVE ESSERE IN ASSOLUTO LA PRIMA ISTRUZIONE
+st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽", layout="wide")
 
-# --- INTERCETTAZIONE E OTTIMIZZAZIONE DOWNLOAD DA QR CODE ---
+# --- NUOVA POSIZIONE BLOCCO DOWNLOAD: INTERCETTA SUBITO IL QR CODE ---
 if st.query_params.get("download") == "true":
     if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
         with open("distinta_corrente.pdf", "rb") as f_pdf:
             pdf_bytes = f_pdf.read()
         
-        # Codifica il PDF in Base64 per forzare il browser del telefono a scaricarlo
+        # Trasforma il PDF in stringa leggibile dal browser mobile
         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
         
-        # Interfaccia mobile gigante a tutto schermo per il tifoso
+        # Interfaccia pulita a tutto schermo ottimizzata per smartphone
         st.markdown(f"""
             <style>
             .stApp {{ background-color: #F0F4F8; }}
@@ -58,13 +58,10 @@ if st.query_params.get("download") == "true":
                 <p style='color: #A0AEC0; font-size: 12px; margin-top: 20px;'>Il file verrà salvato nella cartella Download del tuo smartphone.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.stop()
+        st.stop() # Blocca categoricamente l'esecuzione del resto dell'app
     else:
-        st.warning("⌛ DISTINTA IN AGGIORNAMENTO - La segreteria sta compilando i dati. Riprova tra qualche istante.")
+        st.warning("⌛ DISTINTA IN AGGIORNAMENTO - Il file PDF non è ancora pronto sul server. Riprova tra qualche istante.")
         st.stop()
-
-# 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
-# ... [Il resto del codice di app.py rimane esattamente identico a prima] ...
 
 # 2. DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
 st.markdown("""
@@ -85,12 +82,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Controllo se l'utente usa uno smartphone
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
+# Mostra la vista pubblica standard per chi naviga l'URL classico senza parametri
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
@@ -187,7 +186,7 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # --- MODIFICA LINK QR CODE: Puntiamo direttamente all'innesco del download ---
+                # Link speciale che verrà codificato nel codice QR
                 link_download_diretto = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
@@ -203,10 +202,3 @@ else:
                 
                 pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
                 
-                with open("distinta_corrente.pdf", "wb") as f_pdf:
-                    f_pdf.write(pdf_bytes)
-                
-                st.session_state["pdf_interattivo_pronto"] = pdf_bytes
-                st.success("🎉 Distinta pubblicata! Il QR code ora scarica direttamente il PDF A4.")
-
-    render_download_buttons()
