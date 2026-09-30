@@ -17,19 +17,15 @@ def normalizza_anno(anno_grezzo):
     """Isola l'anno numerico e lo forza rigorosamente nel formato a 4 cifre (YYYY)"""
     if not anno_grezzo:
         return ""
-    # Estrae solo i numeri consecutivi ignorando apici, punti o lettere (es. " '04 " -> "04")
     numeri = "".join(re.findall(r'\d+', str(anno_grezzo)))
-    
     if len(numeri) == 2:
-        # Se sono due cifre, gestisce il cambio di secolo (es. 98 -> 1998, 05 -> 2005)
         anno_int = int(numeri)
         return str(1900 + anno_int) if anno_int > 50 else str(2000 + anno_int)
     elif len(numeri) == 4:
-        # Verifica che sia un anno plausibile (es. evita che prenda numeri di tessera a 4 cifre)
         anno_int = int(numeri)
         if 1970 <= anno_int <= 2015:
             return str(anno_int)
-    return "" # Se il dato è palesemente incoerente, lascia vuoto per farlo correggere all'utente
+    return ""
 
 def encode_image(uploaded_file):
     """Aumenta il contrasto interno e mantiene alta la risoluzione per l'OCR delle cifre"""
@@ -42,17 +38,28 @@ def encode_image(uploaded_file):
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a GPT-4o con istruzioni matematiche stringenti sulla colonna ANNO"""
+    """Invia la foto a GPT-4o focalizzando l'attenzione sul ruolo specifico (CASA o OSPITE)"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
+    # Istruzione dinamica e severa basata sul ruolo della squadra per evitare scambi di dati
+    focus_ruolo = (
+        "ATTENZIONE: Stai analizzando la SQUADRA IN OSPITE (colonna/sezione OSPITI o FUORI CASA). "
+        "Ignora completamente i giocatori della squadra di casa se presenti nella stessa immagine."
+        if ruolo_squadra == "OSPITE" else
+        "ATTENZIONE: Stai analizzando la SQUADRA IN CASA (colonna/sezione LOCALI o IN CASA). "
+        "Ignora completamente i giocatori della squadra ospite se presenti nella stessa immagine."
+    )
+    
     prompt_sistema = (
-        "Sei un sistema OCR ad altissima precisione per distinte LND.\n"
-        "Concentrati sulla colonna dell'ANNO DI NASCITA (solitamente posizionata a destra del nome).\n\n"
-        "REGOLE RIGIDE PER GLI ANNI:\n"
-        "- Non confondere l'anno di nascita con il numero di maglia o con i codici di tesseramento.\n"
-        "- Leggi l'anno esattamente come scritto (es. '04', '2005', '99'). Non inventarlo se la cella è vuota.\n"
-        "- Inserisci il valore trovato nel campo 'anno_nascita' così come appare visivamente.\n\n"
+        f"Sei un sistema OCR umano ad altissima precisione per distinte LND.\n"
+        f"{focus_ruolo}\n\n"
+        "REGOLE RIGIDE DI SCANSIONE:\n"
+        "1. Trova il Nome della Società Corretta e il relativo Allenatore della sezione indicata.\n"
+        "2. Concentrati sulla colonna dell'ANNO DI NASCITA di questa specifica squadra. "
+        "Assicurati di non scambiare le righe: il giocatore N°5 deve avere l'anno scritto sulla sua stessa riga.\n"
+        "3. Non confondere l'anno di nascita con codici tessera o numeri di maglia.\n"
+        "4. Cerca la sigla del Capitano (C, CAP) e del Vice (VC, VICE) solo per questa squadra.\n\n"
         "Rispondi ESCLUSIVAMENTE con questo schema JSON:\n"
         "{\n"
         "  \"squadra\": \"NOME SOCIETA\",\n"
@@ -75,7 +82,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Esegui l'estrazione OCR focalizzandoti sulle date per la squadra {ruolo_squadra}."},
+                    {"type": "text", "text": f"Esegui l'estrazione OCR per la squadra: {ruolo_squadra}."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -83,9 +90,15 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    dati = json.loads(response.choices[0].message.content.strip())
+    dati = json.loads(response.choices.message.content.strip())
     
-    # Mappatura finale ordinata su 20 righe con validazione dell'anno
+    # Pulizia macro informazioni
+    dati["squadra"] = pulisci_testo(dati.get("squadra", ""))
+    dati["allenatore"] = pulisci_testo(dati.get("allenatore", ""))
+    dati["campionato"] = pulisci_testo(dati.get("campionato", ""))
+    dati["data"] = pulisci_testo(dati.get("data", ""))
+    
+    # Mappatura ordinata su 20 righe fisse
     giocatori_estratti = {}
     for g in dati.get("giocatori", []):
         try:
@@ -93,7 +106,7 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             if 1 <= num <= 20:
                 giocatori_estratti[num] = {
                     "cognome_nome": pulisci_testo(g.get("cognome_nome", "")),
-                    "anno_nascita": normalizza_anno(g.get("anno_nascita", "")) # APPLICAZIONE FILTRO
+                    "anno_nascita": normalizza_anno(g.get("anno_nascita", ""))
                 }
         except:
             continue
