@@ -6,8 +6,8 @@ def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
     st.markdown("""
         <style>
-        /* BLOCCO AGGIUNTIVO PER EMERGENZA LOGO MOBILE */
-        [data-testid="stStatusWidget"], [data-testid="stFooter"], footer, .stFooter, div[class*="viewerBadge"], header, .stAppDeployButton {
+        /* BLOCCO RIGIDO ANTI-LOGO MOBILE */
+        div[class*="viewerBadge"], a[class*="viewerBadge"], [data-testid="stFooter"], footer, .stFooter, header, .stAppDeployButton {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
