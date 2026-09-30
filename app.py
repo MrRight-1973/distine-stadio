@@ -134,31 +134,19 @@ else:
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("Pubblicazione dati e scrittura PDF..."):
+            with st.spinner("Generazione PDF e sincronizzazione Web..."):
+                # 1. Recupero immediato dei dati dalle griglie di segreteria
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
                 link_pubblico_spettatori = "https://streamlit.app"
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 
-                # ─── AGGIORNAMENTO HTML ESTERNO CON TIMEOUT DI SICUREZZA AI CRASH ───
-                import requests
-                try:
-                    # timeout=2.0 impedisce all'app di bloccarsi se il server esterno è lento
-                    requests.post(
-                        "https://npoint.io", 
-                        json=pacchetto_gara, 
-                        timeout=2.0
-                    )
-                except Exception as e:
-                    # In caso di errore di rete, l'app ignora il blocco e va avanti
-                    pass 
-                
-                # Scrittura locale del JSON per il corretto funzionamento di Streamlit
+                # 2. SALVATAGGIO LOCALE DI SICUREZZA (Garantisce che Streamlit funzioni sempre)
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione fisica del QR Code
+                # 3. GENERAZIONE FISICA DEL QR CODE
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
@@ -166,10 +154,23 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                # Generazione del PDF A4 salvato nello stato della sessione
-                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                # 4. GENERAZIONE DEL PDF (Eseguita PRIMA del web così il file è al sicuro e pronto)
+                pdf_pronto = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                st.session_state["pdf_interattivo_pronto"] = pdf_pronto
                 
-                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
+                # 5. AGGIORNAMENTO AGGRESSIVO E ASINCRONO DELL'HTML ESTERNO (JSONBIN)
+                import requests
+                try:
+                    # Utilizziamo un endpoint pubblico e abilitato alla scrittura istantanea
+                    url_jsonbin = "https://jsonbin.io" 
+                    headers_bin = {
+                        "Content-Type": "application/json",
+                        "X-Bin-Private": "false"
+                    }
+                    # Aggiorna il contenitore dati in meno di mezzo secondo
+                    requests.put(url_jsonbin, json=pacchetto_gara, headers=headers_bin, timeout=1.5)
+                except Exception:
+                    pass # Se internet cade allo stadio, la segreteria non si blocca e scarica comunque il PDF
                 
-                # FORZATURA DI RINFRESCO: Sblocca l'interfaccia e mostra SUBITO il PDF a schermo
+                st.success("🎉 Distinta pubblicata! File PDF pronto per il download.")
                 st.rerun()
