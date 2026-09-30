@@ -18,26 +18,24 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=7.5, leading=10, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
     
-    # MODIFICA 1: Testo modificato al plurale
     elementi_sinistra = [
         Paragraph("<b>DISTINTE DI GARA UFFICIALI</b>", title_style),
         Spacer(1, 4)
     ]
     
-    # MODIFICA 2: Campionato e Data Gara sono ora inseriti sulla stessa identica riga (Riga 1)
     tabella_info_dati = [
         [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style)],
         [Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[240, 210])
+    t_info = Table(tabella_info_dati, colWidths=[180, 180])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5), 
         ('TOPPADDING', (0,0), (-1,-1), 1.5)
     ]))
     elementi_sinistra.append(t_info)
     
-    # Lettura del logo societario con Aspect Ratio corretto
+    # Lettura locale del logo societario con Aspect Ratio corretto
     img_logo = None
     nome_file_logo = "logo_azzurra.png"
     if os.path.exists(nome_file_logo):
@@ -54,13 +52,13 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             img_logo = None
 
     if img_logo:
-        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[450, 60])
+        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[490, 50])
         t_header.setStyle(TableStyle([
             ('ALIGN', (1,0), (1,0), 'RIGHT'),
             ('VALIGN', (1,0), (1,0), 'MIDDLE')
         ]))
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 60])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[490, 50])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -109,10 +107,11 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=90, height=90)
         
+        # MODIFICA: Aggiornata la dicitura informativa per il pubblico nel footer
         t_qr_footer = Table([
             [img_qr_pdf],
             [Spacer(1, 3)],
-            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE AL GESTIONALE UFFICIALE", qr_text_style)]
+            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
         ], colWidths=[550])
         
         t_qr_footer.setStyle(TableStyle([
