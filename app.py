@@ -3,78 +3,90 @@ import qrcode
 import io
 import json
 import pandas as pd
-import requests # <--- SPOSTATO IN CIMA AL FILE
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
+# 1. CONFIGURAZIONE INIZIALE OBBLIGATORIA IN CIMA
+st.set_page_config(page_title="Distinte Live - Azzurra Due Carrare", page_icon="⚽", layout="wide")
 
-# DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
+# 2. ABBATTIMENTO DEI BADGE DI STREAMLIT CLOUD
 st.markdown("""
     <style>
-    /* Rende i loghi completamente trasparenti e disattiva qualsiasi click o tocco del dito */
-    .viewerBadge_container__1QS13, 
-    div[class*="viewerBadge"], 
-    a[href*="streamlit.io"], 
-    a[href*="github.com"],
+    [data-testid="stStatusWidget"],
+    [data-testid="stFooter"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    div[class*="viewerBadge"],
+    div[class*="StatusWidget"],
+    div[class*="StyledEmbedControlBar"],
     footer, 
-    div[data-testid="stFooter"],
+    .stFooter,
     header,
     .stAppDeployButton {
-        pointer-events: none !important;   /* Annulla il click/tocco del dito */
-        opacity: 0 !important;             /* Rende il logo invisibile */
-        background: transparent !important;
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0px !important;
+        max-height: 0px !important;
+        width: 0px !important;
+        pointer-events: none !important;
+        overflow: hidden !important;
     }
-    
-    /* Ottimizzazione dei margini superiori */
     .block-container {
         padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    .stApp {
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
+# Controllo se l'app riceve una richiesta diretta per la pagina HTML pulita dei tifosi
+query_params = st.query_params
+if "condividi" in query_params:
+    # Se il link contiene ?condividi=tifosi, mostra direttamente l'HTML puro senza Streamlit!
+    from ui_spettatore import render_html_puro_tifosi
+    render_html_puro_tifosi()
+    st.stop() # Ferma l'app qui per questa visualizzazione
+
+# Identificazione dispositivo per la segreteria
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Gestione solida della vista tramite Session State
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
+# RENDERING DELLA VISTA STANDARD
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
-    # Il pulsante di sblocco appare ESCLUSIVAMENTE sui PC fissi, mai sugli smartphone
     if not is_mobile:
         st.markdown("---")
         with st.expander("⚙️ Area Riservata Segreteria PC"):
             password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
             if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
-                # PASSWORD UFFICIALE DI ACCESSO
                 if password_inserita == "azzurra2026":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
                 else:
-                    st.error("❌ Password errata. Accesso negato.")
+                    st.error("❌ Password errata.")
 else:
-    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
-    st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
-    
+    # --- PANNELLO PC SEGRETERIA GESTIONALE ---
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
         st.session_state["vista_attiva"] = "pubblica"
         st.rerun()
         
     st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
-    st.write("La conferma delle liste aggiornerà la pagina web in tempo reale e genererà il PDF A4.")
     
     api_key_openai = st.secrets.get("OPENAI_API_KEY")
 
     def reset_solo_dati_ai():
-        chiavi_da_eliminare = ["dati_mappati", "macro_info", "firma_scansione_attiva", "pdf_interattivo_pronto"]
-        for chiave in chiavi_da_eliminare:
+        for chiave in ["dati_mappati", "macro_info", "firma_scansione_attiva", "pdf_interattivo_pronto"]:
             if chiave in st.session_state:
                 del st.session_state[chiave]
         st.session_state["griglia_casa"] = pd.DataFrame([{"N°": i, "GIOCATORE": "", "ANNO": ""} for i in range(1, 21)]).set_index("N°")
@@ -105,7 +117,7 @@ else:
         if "dati_mappati" not in st.session_state:
             with c_scan:
                 if st.button("🔍 Fase 1: Esegui Scansione AI delle Liste", type="primary", use_container_width=True):
-                    with st.spinner("Estrazione giocatori e date in corso con GPT-4o..."):
+                    with st.spinner("Scansione in corso con GPT-4o..."):
                         try:
                             casa_raw = analizza_distinta(file_casa, "CASA", api_key_openai)
                             ospite_raw = analizza_distinta(file_ospite, "OSPITE", api_key_openai)
@@ -119,7 +131,7 @@ else:
                             st.session_state["dati_mappati"] = True
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Errore nell'estrazione: {e}")
+                            st.error(f"Errore: {e}")
 
     if "dati_mappati" in st.session_state:
         st.markdown("---")
@@ -136,19 +148,17 @@ else:
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("Generazione file PDF ufficiale..."):
-                # Recupera i dati aggiornati dalle tabelle di modifica
+            with st.spinner("Generazione PDF e pubblicazione..."):
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
+                # Il link speciale interno che i tifosi apriranno!
                 link_pubblico_spettatori = "https://streamlit.app"
-                pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 
-                # Scrittura locale del JSON per il funzionamento originale di Streamlit
+                pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione del QR Code fisso
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
@@ -156,16 +166,8 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                # Salvataggio immediato del PDF nel Session State
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-            
-            with st.spinner("Sincronizzazione con la pagina HTML di GitHub..."):
-                try:
-                    # Utilizziamo kvdb.io per il transito dati istantaneo senza credenziali bloccanti
-                    url_pulito = "https://kvdb.io"
-                    requests.post(url_pulito, json=pacchetto_gara, timeout=1.5)
-                except Exception:
-                    pass # Se l'invio web fallisce, non blocca l'app
-                
-            st.success("🎉 Distinta online pubblicata! File PDF pronto.")
-            st.rerun()
+                st.success("🎉 Distinta pubblicata online e PDF pronto per il download!")
+                st.rerun()
+
+    render_download_buttons()
