@@ -13,7 +13,7 @@ from ui_spettatore import render_pagina_spettatori
 if st.query_params.get("view") == "public":
     render_pagina_spettatori()
 else:
-    # --- INTERFACCIA PC SEGRETERIA (Quella attuale) ---
+    # --- INTERFACCIA PC SEGRETERIA ---
     st.set_page_config(page_title="Pannello Segreteria - Azzurra Due Carrare", page_icon="⚽", layout="wide")
     st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
     st.write("Carica i fogli gara. La conferma aggiornerà automaticamente la pagina web degli smartphone tifosi.")
@@ -88,22 +88,23 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # LINK FISSO E PERMANENTE PER IL TIFOSO (Il QR Code punterà sempre qui)
+                # CORREZIONE: Forza rigidamente il link reale pubblico ufficiale per evitare i reindirizzamenti di share.streamlit.io
                 link_pubblico_spettatori = "https://streamlit.app"
                 
-                # SALVATAGGIO CENTRALIZZATO: Salva il file JSON sul server cloud condiviso
+                # Salva il file JSON condiviso sul server cloud
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione del QR Code fisso da stampare sull'A4
-                qr = qrcode.QRCode(version=1, border=1)
+                # Generazione del QR Code fisso con parametri espliciti
+                qr = qrcode.QRCode(version=1, box_size=10, border=1)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
+                
                 buf_qr = io.BytesIO()
-                qr.make_image().save(buf_qr, format="PNG")
+                qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online aggiornata! File PDF pronto da scaricare e appendere all'ingresso dello stadio.")
+                st.success("🎉 Distinta online aggiornata con successo sul link fisso!")
 
     render_download_buttons()
