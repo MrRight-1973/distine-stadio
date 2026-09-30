@@ -3,10 +3,22 @@ import json
 import os
 
 def render_pagina_spettatori():
-    """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
+    """Mostra la distinta live camuffando graficamente i loghi per i tifosi"""
     st.markdown("""
         <style>
         .main { background-color: #F0F4F8; }
+        
+        /* MIMETISMO RADICALE: Rende invisibile il badge fondendolo con lo sfondo */
+        footer, [data-testid="stFooter"], .stFooter, div[class*="viewerBadge"], a[class*="viewerBadge"], [data-testid="stStatusWidget"] {
+            background-color: #F0F4F8 !important;
+            color: #F0F4F8 !important;
+            background: #F0F4F8 !important;
+            box-shadow: none !important;
+        }
+        div[class*="viewerBadge"] a, div[class*="viewerBadge"] span {
+            color: #F0F4F8 !important;
+        }
+        
         .titolo-match { text-align: center; color: #1A365D; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
         .info-match { text-align: center; color: #4A5568; font-size: 14px; margin-bottom: 20px; }
         .card-squadra { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
@@ -17,9 +29,8 @@ def render_pagina_spettatori():
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
         
-        /* CUSCINETTO PROTETTIVO STANDARD */
         .spazio-sicurezza-footer {
-            height: 120px;
+            height: 100px;
             margin-top: 20px;
             text-align: center;
             color: #A0AEC0;
@@ -43,36 +54,30 @@ def render_pagina_spettatori():
             dati = json.load(f)
             
         info = dati.get("info_gara", {})
-        campionato = info.get("campionato", "")
-        data_gara = info.get("data", "")
-        arbitro = info.get("arbitro", "")
+        st.markdown(f"<div class='info-match'>🏆 {info.get('campionato', '')} | 📅 {info.get('data', '')}<br>🏁 Arbitro: {info.get('arbitro', '')}</div>", unsafe_allow_html=True)
         
-        st.markdown(f"<div class='info-match'>🏆 {campionato} | 📅 {data_gara}<br>🏁 Arbitro: {arbitro}</div>", unsafe_allow_html=True)
-        
-        # Render Squadra Casa
+        # Casa
         casa_dati = dati.get("casa", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
         st.markdown(f"<div class='nome-squadra'>🏠 {casa_dati.get('squadra', 'SQUADRA CASA')}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='allenatore'>All. {casa_dati.get('allenatore', '')}</div>", unsafe_allow_html=True)
-        
         for g in casa_dati.get("giocatori", []):
-            nome_g = g.get("GIOCATORE", "")
-            if nome_g.strip():
-                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
+            if g.get("GIOCATORE", "").strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{g.get('GIOCATORE', '')}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Render Squadra Ospite
+        # Ospite
         ospite_dati = dati.get("ospite", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
         st.markdown(f"<div class='nome-squadra'>🚀 {ospite_dati.get('squadra', 'SQUADRA OSPITE')}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='allenatore'>All. {ospite_dati.get('allenatore', '')}</div>", unsafe_allow_html=True)
-        
         for g in ospite_dati.get("giocatori", []):
-            nome_g = g.get("GIOCATORE", "")
-            if nome_g.strip():
-                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
+            if g.get("GIOCATORE", "").strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{g.get('GIOCATORE', '')}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
+        st.markdown("<div class='spazio-sicurezza-footer'>⚽ Azzurra Due Carrare Live</div>", unsafe_allow_html=True)
+        
     except Exception:
-        st.warning("⌛ Aggiornamento liste in corso da parte della segreteria...")
+        st.warning("⌛ Aggiornamento liste in corso...")
         return
