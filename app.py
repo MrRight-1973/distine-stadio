@@ -9,21 +9,35 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# INIEZIONE CSS PER NASCONDERE L'ICONA GITHUB, LA STELLA, IL MENU E IL FOOTER DI STREAMLIT
+# INIEZIONE CSS ULTRA-POTENZIATA ANTIBRANDING (PC + MOBILE)
 st.markdown("""
     <style>
-    /* Nasconde l'icona di GitHub e la stella in alto a destra */
-    .viewerBadge_container__1QS13, .viewerBadge_link__1QS13, a[href*="github.com"] {
+    /* Nasconde in modo distruttivo icone di GitHub, stelle, pulsanti fork e scritte Streamlit */
+    .viewerBadge_container__1QS13, 
+    .viewerBadge_link__1QS13, 
+    div[class*="viewerBadge"], 
+    a[href*="github.com"], 
+    a[href*="streamlit.io"] {
         display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
     }
-    /* Nasconde il menu a tre linee in alto a destra e il pulsante di deploy */
-    #MainMenu, header, .stAppDeployButton {
+    /* Nasconde barra superiore, menu a tre linee e tasto di deploy */
+    #MainMenu, header, .stAppDeployButton, div[data-testid="stHeader"] {
         visibility: hidden !important;
         display: none !important;
+        height: 0 !important;
     }
-    /* Nasconde la scritta "Made with Streamlit" in fondo alla pagina */
-    footer {
+    /* Rimuove lo spazio vuoto superiore causato dalla barra nascosta */
+    .block-container {
+        padding-top: 1rem !important;
+    }
+    /* Elimina il footer di Streamlit */
+    footer, div[data-testid="stFooter"] {
         visibility: hidden !important;
+        display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
