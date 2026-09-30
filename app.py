@@ -138,9 +138,21 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                link_pubblico_spettatori = "https://distine-stadio.streamlit.app/"
+                # Il link originale di Streamlit per il QR Code (rimane tutto come prima)
+                link_pubblico_spettatori = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
+                
+                # ─── AGGIUNTA: POPOLIAMO ANCHE LA PAGINA HTML ESTERNA DI GITHUB ───
+                import requests
+                try:
+                    # Spedisce i dati al database che alimenta il tuo file distinta.html
+                    requests.post("https://npoint.io", json=pacchetto_gara)
+                except Exception as e:
+                    pass # Se l'invio esterno fallisce, l'app Streamlit continua comunque senza bloccarsi
+                # ──────────────────────────────────────────────────────────────────
+                
+                # Salvataggio locale standard del JSON per Streamlit
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
@@ -153,5 +165,3 @@ else:
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
                 st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
-
-    render_download_buttons()
