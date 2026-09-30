@@ -18,48 +18,49 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=7.5, leading=10, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
     
+    # MODIFICA 1: Testo modificato al plurale
     elementi_sinistra = [
-        Paragraph("<b>DISTINTA DI GARA UFFICIALE LND</b>", title_style),
+        Paragraph("<b>DISTINTE DI GARA UFFICIALI</b>", title_style),
         Spacer(1, 4)
     ]
     
+    # MODIFICA 2: Campionato e Data Gara sono ora inseriti sulla stessa identica riga (Riga 1)
     tabella_info_dati = [
         [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style)],
         [Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[180, 180])
-    t_info.setStyle(TableStyle([('BOTTOMPADDING', (0,0), (-1,-1), 1.5), ('TOPPADDING', (0,0), (-1,-1), 1.5)]))
+    t_info = Table(tabella_info_dati, colWidths=[240, 210])
+    t_info.setStyle(TableStyle([
+        ('BOTTOMPADDING', (0,0), (-1,-1), 1.5), 
+        ('TOPPADDING', (0,0), (-1,-1), 1.5)
+    ]))
     elementi_sinistra.append(t_info)
     
-    # Lettura locale del logo societario con calcolo automatico dell'Aspect Ratio
+    # Lettura del logo societario con Aspect Ratio corretto
     img_logo = None
     nome_file_logo = "logo_azzurra.png"
     if os.path.exists(nome_file_logo):
         try:
-            # Creiamo un'istanza temporanea dell'immagine per estrarne le proporzioni native
             img_temporanea = RLImage(nome_file_logo)
             w_originale = img_temporanea.drawWidth
             h_originale = img_temporanea.drawHeight
             
-            # Fissiamo la larghezza desiderata nel PDF e calcoliamo l'altezza proporzionale
             larghezza_target = 50.0
             altezza_proporzionale = (h_originale / w_originale) * larghezza_target
             
-            # Generiamo l'immagine finale perfettamente proporzionata
             img_logo = RLImage(nome_file_logo, width=larghezza_target, height=altezza_proporzionale)
         except Exception:
             img_logo = None
 
-    # Composizione dell'intestazione superiore
     if img_logo:
-        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[450, 100])
+        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[450, 60])
         t_header.setStyle(TableStyle([
             ('ALIGN', (1,0), (1,0), 'RIGHT'),
             ('VALIGN', (1,0), (1,0), 'MIDDLE')
         ]))
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 100])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 60])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -95,7 +96,6 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         elementi_squadra.append(t)
         return elementi_squadra
 
-    # Inserimento delle due tabelle affiancate
     macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 30, 260])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -104,7 +104,6 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     ]))
     story.append(macro_tabella)
     
-    # Blocco QR Code centrato in fondo
     if qr_code_bytes:
         story.append(Spacer(1, 15))
         buf_qr = io.BytesIO(qr_code_bytes)
