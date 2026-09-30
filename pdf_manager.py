@@ -23,12 +23,13 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         Spacer(1, 4)
     ]
     
+    # MODIFICA: Terna arbitrale allineata verticalmente in colonna sotto l'arbitro
     tabella_info_dati = [
-        [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style)],
-        [Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
+        [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style)],
+        [Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
         [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
     ]
-    t_info = Table(tabella_info_dati, colWidths=[180, 180])
+    t_info = Table(tabella_info_dati, colWidths=[270, 270])
     t_info.setStyle(TableStyle([
         ('BOTTOMPADDING', (0,0), (-1,-1), 1.5), 
         ('TOPPADDING', (0,0), (-1,-1), 1.5)
@@ -94,7 +95,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         elementi_squadra.append(t)
         return elementi_squadra
 
-    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 30, 260])
+    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 20, 260])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
@@ -107,12 +108,11 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=90, height=90)
         
-        # MODIFICA: Aggiornata la dicitura informativa per il pubblico nel footer
         t_qr_footer = Table([
             [img_qr_pdf],
             [Spacer(1, 3)],
             [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
-        ], colWidths=[550])
+        ], colWidths=[540])
         
         t_qr_footer.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
