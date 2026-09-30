@@ -17,15 +17,15 @@ def render_pagina_spettatori():
         .nome-giocatore { flex-grow: 1; text-align: left; padding-left: 5px; color: #2D3748; }
         .anno-giocatore { color: #A0AEC0; width: 40px; text-align: right; }
         
-        /* BLOCCA IL TOCCO DEL DITO SUI LOGHI IN BASSO SU SMARTPHONE */
-        .viewerBadge_container__1QS13, 
-        div[class*="viewerBadge"], 
-        a[href*="streamlit.io"], 
-        a[href*="github.com"],
-        footer, 
-        div[data-testid="stFooter"] {
-            pointer-events: none !important;   /* Il dito ci passa attraverso senza cliccare */
-            opacity: 0 !important;             /* Diventa invisibile */
+        /* CUSCINETTO PROTETTIVO: Spinge i giocatori verso l'alto isolando i loghi Streamlit in un'area vuota */
+        .spazio-sicurezza-footer {
+            height: 120px;
+            margin-top: 20px;
+            text-align: center;
+            color: #A0AEC0;
+            font-size: 12px;
+            border-top: 1px dashed #CBD5E0;
+            padding-top: 15px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -33,7 +33,6 @@ def render_pagina_spettatori():
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
     st.markdown("<div class='titolo-match' style='font-size:18px; color:#2B6CB0;'>DISTINTA DIGITALE LIVE</div>", unsafe_allow_html=True)
     
-    # Se il file JSON non esiste ancora o è vuoto, mostra la schermata di attesa protettiva
     if not os.path.exists("distinta_corrente.json") or os.path.getsize("distinta_corrente.json") == 0:
         st.write("")
         st.warning("⌛ DISTINTA IN AGGIORNAMENTO\n\nLa segreteria sta caricando le distinte ufficiali della partita. Riprova tra qualche istante o rinfresca la pagina.")
@@ -43,7 +42,6 @@ def render_pagina_spettatori():
         with open("distinta_corrente.json", "r", encoding="utf-8") as f:
             dati = json.load(f)
             
-        # CORREZIONE SICURA: Uso di .get() con valore di fallback vuoto per evitare qualsiasi KeyError
         info = dati.get("info_gara", {})
         campionato = info.get("campionato", "")
         data_gara = info.get("data", "")
@@ -51,7 +49,7 @@ def render_pagina_spettatori():
         
         st.markdown(f"<div class='info-match'>🏆 {campionato} | 📅 {data_gara}<br>🏁 Arbitro: {arbitro}</div>", unsafe_allow_html=True)
         
-        # Render Squadra Casa con estrazione protetta
+        # Render Squadra Casa
         casa_dati = dati.get("casa", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
         st.markdown(f"<div class='nome-squadra'>🏠 {casa_dati.get('squadra', 'SQUADRA CASA')}</div>", unsafe_allow_html=True)
@@ -63,7 +61,7 @@ def render_pagina_spettatori():
                 st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Render Squadra Ospite con estrazione protetta
+        # Render Squadra Ospite
         ospite_dati = dati.get("ospite", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
         st.markdown(f"<div class='nome-squadra'>🚀 {ospite_dati.get('squadra', 'SQUADRA OSPITE')}</div>", unsafe_allow_html=True)
@@ -79,4 +77,5 @@ def render_pagina_spettatori():
         st.warning("⌛ Aggiornamento liste in corso da parte della segreteria...")
         return
         
-    st.markdown("<p style='text-align:center; color:#A0AEC0; font-size:11px;'>Servizio Distinte Ufficiali Azzurra Due Carrare</p>", unsafe_allow_html=True)
+    # INSERIMENTO DEL CUSCINETTO FISICO DI PROTEZIONE IN FONDO ALLA PAGINA SMARTPHONE
+    st.markdown("<div class='spazio-sicurezza-footer'>© Servizio Distinte Ufficiali Azzurra Due Carrare</div>", unsafe_allow_html=True)
