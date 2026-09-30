@@ -1,5 +1,5 @@
 import io
-import requests
+import os
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -32,17 +32,15 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     t_info.setStyle(TableStyle([('BOTTOMPADDING', (0,0), (-1,-1), 1.5), ('TOPPADDING', (0,0), (-1,-1), 1.5)]))
     elementi_sinistra.append(t_info)
     
-    # DOWNLOAD SICURO DEL LOGO: Scarica i byte in anticipo isolando completamente gli errori di ReportLab
+    # LETTURA LOCALE DEL LOGO: Cerca il file caricato sul tuo GitHub
     img_logo = None
-    url_logo = "https://githubusercontent.com"
-    try:
-        response = requests.get(url_logo, timeout=5)
-        if response.status_code == 200:
-            # Converte i byte scaricati in un file virtuale leggibile in memoria
-            logo_bytes = io.BytesIO(response.content)
-            img_logo = RLImage(logo_bytes, width=45, height=45)
-    except Exception:
-        img_logo = None # Se internet fallisce, si imposta a None e l'applicazione non si blocca
+    nome_file_logo = "logo_azzurra.png"
+    
+    if os.path.exists(nome_file_logo):
+        try:
+            img_logo = RLImage(nome_file_logo, width=45, height=45)
+        except Exception:
+            img_logo = None
 
     # Costruzione dell'angolo destro (Logo + eventuale QR Code)
     blocco_destra_celle = []
@@ -73,7 +71,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         ]))
         t_header = Table([[elementi_sinistra, t_blocco_destra]], colWidths=[450, sum(col_widths)])
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 90])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 100])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -98,7 +96,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
                 Paragraph(str(g.get('ANNO', '')), normal_style)
             ])
             
-        t = Table(tabella_dati, colWidths=[30, 185, 45])
+        t = Table(tabella_dati, colWidths=[25, 195, 40])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2.2),
