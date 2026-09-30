@@ -9,7 +9,7 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# INTERCETTAZIONE E APPIATTIMENTO DEI BADGE DI STREAMLIT CLOUD
+# INTERCETTAZIONE E ABBATTIMENTO DEI BADGE DI STREAMLIT CLOUD
 st.markdown("""
     <style>
     [data-testid="stStatusWidget"],
@@ -47,11 +47,14 @@ st.markdown("""
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Gestione solida della vista tramite Session State
+# Gestione solida della vista tramite Session State - Forza la segreteria su PC, pubblica su Mobile
 if "vista_attiva" not in st.session_state:
-    st.session_state["vista_attiva"] = "pubblica"
+    if is_mobile:
+        st.session_state["vista_attiva"] = "pubblica"
+    else:
+        st.session_state["vista_attiva"] = "segreteria"
 
-# Se l'utente è un tifoso (o lo stato è su pubblica), mostra solo il Match Program digitale
+# Se l'utente è un tifoso (vista pubblica), mostra il Match Program digitale
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
@@ -61,7 +64,6 @@ if st.session_state["vista_attiva"] == "pubblica":
         with st.expander("⚙️ Area Riservata Segreteria PC"):
             password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
             if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
-                # PASSWORD UFFICIALE DI ACCESSO
                 if password_inserita == "azzurra2026":
                     st.session_state["vista_attiva"] = "segreteria"
                     st.rerun()
@@ -69,9 +71,10 @@ if st.session_state["vista_attiva"] == "pubblica":
                     st.error("❌ Password errata. Accesso negato.")
 else:
     # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
-    if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
-        st.session_state["vista_attiva"] = "pubblica"
-        st.rerun()
+    if is_mobile:
+        if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
+            st.session_state["vista_attiva"] = "pubblica"
+            st.rerun()
         
     st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
     st.write("La conferma delle liste aggiornerà la pagina web in tempo reale e genererà il PDF A4.")
