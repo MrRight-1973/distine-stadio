@@ -12,33 +12,12 @@ from ui_spettatore import render_pagina_spettatori
 # RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
     <style>
-    /* 1. SELETTORE JOLLY ANTI-EMOTION (Rimuove il badge su qualsiasi smartphone) */
-    div[class*="viewerBadge"],
-    a[class*="viewerBadge"],
-    [data-testid="stFooter"],
-    footer,
-    .stFooter,
-    header,
-    .stAppDeployButton {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0px !important;
-        max-height: 0px !important;
-        pointer-events: none !important;
-    }
-    
-    /* 2. RESET DEI MARGINI DELL'APPLICAZIONE MOBILE */
-    .stApp {
-        margin-bottom: 0px !important;
-        padding-bottom: 0px !important;
-    }
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
-    }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden !important;}
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
 user_agent = st.context.headers.get("User-Agent", "").lower()
