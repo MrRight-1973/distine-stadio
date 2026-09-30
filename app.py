@@ -5,7 +5,7 @@ import pandas as pd
 from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
-from ui_components import render_info_match, render_download_buttons
+from ui_components import render_info_match, render_download_buttons, svuota_scansione
 
 st.set_page_config(page_title="Gestione Distinte LND", page_icon="⚽", layout="wide")
 st.title("⚽ Centro Gestione Distinte Gara ")
@@ -50,17 +50,26 @@ if "dati_mappati" in st.session_state:
         dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["squadra_ospite"], inf["all_ospite"])
 
     st.markdown("---")
-    if st.button("⚡ Fase 3: Conferma e Genera PDF A4 con QR Code", type="primary"):
-        with st.spinner("Generazione del file..."):
-            dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
-            dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
-            
-            qr = qrcode.QRCode(version=1, border=1)
-            qr.add_data("https://streamlit.app")
-            buf_qr = io.BytesIO()
-            qr.make_image().save(buf_qr, format="PNG")
-            
-            st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-            st.success("🎉 Documento A4 pronto!")
+    
+    # MODIFICA: Creazione di due colonne affiancate per le azioni finali
+    c_azioni1, c_azioni2 = st.columns(2)
+    
+    with c_azioni1:
+        if st.button("⚡ Fase 3: Conferma e Genera PDF", type="primary", use_container_width=True):
+            with st.spinner("Generazione del file..."):
+                dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
+                dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
+                
+                qr = qrcode.QRCode(version=1, border=1)
+                qr.add_data("https://streamlit.app")
+                buf_qr = io.BytesIO()
+                qr.make_image().save(buf_qr, format="PNG")
+                
+                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                st.success("🎉 Documento A4 pronto!")
+                
+    with c_azioni2:
+        if st.button("🔄 Svuota e Ripeti Scansione AI", type="secondary", use_container_width=True):
+            svuota_scansione()
 
 render_download_buttons()
