@@ -11,10 +11,10 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# 1. QUESTA DEVE ESSERE IN ASSOLUTO LA PRIMA ISTRUZIONE
+# 1. IMPOSTAZIONE CONFIGURAZIONE PAGINA (Deve essere la prima istruzione)
 st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽", layout="wide")
 
-# --- NUOVA POSIZIONE BLOCCO DOWNLOAD: INTERCETTA SUBITO IL QR CODE ---
+# --- INTERCETTAZIONE E OTTIMIZZAZIONE DOWNLOAD DA QR CODE ---
 if st.query_params.get("download") == "true":
     if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
         with open("distinta_corrente.pdf", "rb") as f_pdf:
@@ -194,14 +194,15 @@ else:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-                qr.add_data(link_download_diretto)
+                qr.add_data(f"{link_download_diretto}?download=true")
                 qr.make(fit=True)
                 
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-
+                
+# --- SCRITTURA PDF SU DISCO CORRETTA ED INDENTATA ---
 with open("distinta_corrente.pdf", "wb") as f_pdf:
 f_pdf.write(pdf_bytes)
 st.session_state["pdf_interattivo_pronto"] = pdf_bytes
