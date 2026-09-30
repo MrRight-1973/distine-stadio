@@ -59,7 +59,7 @@ if st.query_params.get("download") == "true":
                 <p style='color: #A0AEC0; font-size: 12px; margin-top: 20px;'>Il file verrà salvato nella cartella Download del tuo smartphone.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.stop() # Blocca categoricamente l'esecuzione del resto dell'app
+        st.stop()
     else:
         st.warning("⌛ DISTINTA IN AGGIORNAMENTO - Il file PDF non è ancora pronto sul server. Riprova tra qualche istante.")
         st.stop()
@@ -83,14 +83,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Controllo se l'utente usa uno smartphone
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
-# Mostra la vista pubblica standard per chi naviga l'URL classico senza parametri
 if st.session_state["vista_attiva"] == "pubblica":
     render_pagina_spettatori()
     
@@ -105,7 +103,6 @@ if st.session_state["vista_attiva"] == "pubblica":
                 else:
                     st.error("❌ Password errata. Accesso negato.")
 else:
-    # --- INTERFACCIA PC SEGRETERIA GESTIONALE ---
     if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
         st.session_state["vista_attiva"] = "pubblica"
         st.rerun()
@@ -201,12 +198,17 @@ else:
                 buf_qr = io.BytesIO()
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
-                pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                
-# --- SCRITTURA PDF SENZA BLOCCO WITH PER EVITARE AL 100% ERRORI DI INDENTAZIONE ---
-f_write_pdf = open("distinta_corrente.pdf", "wb")
-f_write_pdf.write(pdf_bytes)
-f_write_pdf.close()
+                try:
+                    pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
+                    
+                    if pdf_bytes and len(pdf_bytes) > 0:
+                        f_write_pdf = open("distinta_corrente.pdf", "wb")
+                        f_write_pdf.write(pdf_bytes)
+                        f_write_pdf.close()
 st.session_state["pdf_interattivo_pronto"] = pdf_bytes
 st.success("🎉 Distinta pubblicata! Il QR code ora scarica direttamente il PDF A4.")
+else:
+st.error("❌ Il file PDF generato è vuoto. Controlla il layout di pdf_manager.py")
+except Exception as err_pdf:
+st.error(f"❌ Errore durante la creazione fisica del PDF: {err_pdf}")
 render_download_buttons()
