@@ -167,7 +167,7 @@ else:
                 
                 # 3. Imposta il link delle GitHub Pages nel QR Code
                 # NOTA: Sostituisci "TUO-UTENTE" e "NOME-REPO" con i tuoi dati reali di GitHub
-                link_pubblico_spettatori = "https://github.io"
+                link_pubblico_spettatori = "https://mrright-1973.github.io/distine-stadio/distinta.html"
                 
                 # 4. Generazione fisica del QR Code in memoria
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
