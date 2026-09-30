@@ -6,62 +6,76 @@ from PIL import Image
 from openai import OpenAI
 
 def pulisci_testo(testo):
-    """Rimuove caratteri speciali e standardizza rigorosamente in MAIUSCOLO"""
+    """Rimuove caratteri speciali inutili e standardizza in MAIUSCOLO"""
     if not testo or str(testo).strip() in ["", "N.D.", "NONE", "NULL", "NON INDICATO"]:
         return ""
     testo_pulito = str(testo).replace("_", " ")
     testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
     return testo_pulito.strip().upper()
 
+def normalizza_anno(anno_grezzo):
+    """Isola l'anno numerico e lo forza rigorosamente nel formato a 4 cifre (YYYY)"""
+    if not anno_grezzo:
+        return ""
+    # Estrae solo i numeri consecutivi ignorando apici, punti o lettere (es. " '04 " -> "04")
+    numeri = "".join(re.findall(r'\d+', str(anno_grezzo)))
+    
+    if len(numeri) == 2:
+        # Se sono due cifre, gestisce il cambio di secolo (es. 98 -> 1998, 05 -> 2005)
+        anno_int = int(numeri)
+        return str(1900 + anno_int) if anno_int > 50 else str(2000 + anno_int)
+    elif len(numeri) == 4:
+        # Verifica che sia un anno plausibile (es. evita che prenda numeri di tessera a 4 cifre)
+        anno_int = int(numeri)
+        if 1970 <= anno_int <= 2015:
+            return str(anno_int)
+    return "" # Se il dato è palesemente incoerente, lascia vuoto per farlo correggere all'utente
+
 def encode_image(uploaded_file):
-    """Mantiene un'alta risoluzione per non perdere i dettagli del testo piccolo"""
+    """Aumenta il contrasto interno e mantiene alta la risoluzione per l'OCR delle cifre"""
     img = Image.open(uploaded_file)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
-    img.thumbnail((2000, 2000)) # Risoluzione aumentata a 2000px per massima leggibilità OCR
+    img.thumbnail((2000, 2000))
     buffer_img = io.BytesIO()
     img.save(buffer_img, format="JPEG", quality=95)
     return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Invia la foto a GPT-4o con un sistema di tracciamento riga per riga ad altissima precisione"""
+    """Invia la foto a GPT-4o con istruzioni matematiche stringenti sulla colonna ANNO"""
     client = OpenAI(api_key=api_key)
     base64_image = encode_image(uploaded_file)
     
     prompt_sistema = (
-        "Sei un sistema OCR umano e scientifico specializzato nel digitalizzare distinte di gara di calcio LND.\n"
-        "Devi scansionare il foglio con la massima attenzione ai dettagli visivi. Non inventare o allucinare.\n\n"
-        "PROTOCOLLO DI ANALISI RIGIDO:\n"
-        "1. Identifica il blocco della squadra richiesto. Trova il Nome della Società e l'Allenatore.\n"
-        "2. Leggi la tabella principale dei calciatori procedendo esclusivamente RIGA PER RIGA da sinistra a destra.\n"
-        "3. Per ogni riga, individua il numero di maglia (da 1 a 20). Se un numero non ha un giocatore scritto a fianco, ignoralo.\n"
-        "4. Leggi il Cognome e Nome del giocatore: prenditi il tempo per decifrare tutte le lettere del cognome e del nome senza troncarle.\n"
-        "5. Cerca con estrema cura i simboli del Capitano: se accanto al numero o al nome vedi una '(C)', 'C', 'CAP' o un cerchio, memorizza quel numero come capitano.\n"
-        "6. Cerca i simboli del Vice Capitano: se vedi '(VC)', 'VC', 'V' o 'VICE', memorizza quel numero come vice capitano.\n"
-        "7. Estrai l'Anno di Nascita in fondo alla riga. Se è scritto in formato a 2 cifre (es. '04'), convertilo sempre in 4 cifre ('2004'). Se vedi '99', convertilo in '1999'.\n\n"
-        "Rispondi ESCLUSIVAMENTE con un file JSON valido strutturato così:\n"
+        "Sei un sistema OCR ad altissima precisione per distinte LND.\n"
+        "Concentrati sulla colonna dell'ANNO DI NASCITA (solitamente posizionata a destra del nome).\n\n"
+        "REGOLE RIGIDE PER GLI ANNI:\n"
+        "- Non confondere l'anno di nascita con il numero di maglia o con i codici di tesseramento.\n"
+        "- Leggi l'anno esattamente come scritto (es. '04', '2005', '99'). Non inventarlo se la cella è vuota.\n"
+        "- Inserisci il valore trovato nel campo 'anno_nascita' così come appare visivamente.\n\n"
+        "Rispondi ESCLUSIVAMENTE con questo schema JSON:\n"
         "{\n"
-        "  \"squadra\": \"NOME DELLA SOCIETA\",\n"
+        "  \"squadra\": \"NOME SOCIETA\",\n"
         "  \"allenatore\": \"COGNOME NOME\",\n"
         "  \"capitano_num\": 10,\n"
         "  \"vice_capitano_num\": 4,\n"
         "  \"data\": \"DD/MM/YYYY\",\n"
         "  \"campionato\": \"NOME CAMPIONATO\",\n"
         "  \"giocatori\": [\n"
-        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": \"2005\"}\n"
+        "    {\"numero\": 1, \"cognome_nome\": \"ROSSI ANDREA\", \"anno_nascita\": \"04\"}\n"
         "  ]\n"
         "}"
     )
     
     response = client.chat.completions.create(
-        model="gpt-4o", # PASSAGGIO CHIAVE: Usiamo gpt-4o standard (visione nettamente superiore rispetto a gpt-4o-mini)
+        model="gpt-4o",
         response_format={ "type": "json_object" },
         messages=[
             {"role": "system", "content": prompt_sistema},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Esegui la scansione e l'estrazione dati della squadra: {ruolo_squadra}."},
+                    {"type": "text", "text": f"Esegui l'estrazione OCR focalizzandoti sulle date per la squadra {ruolo_squadra}."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }
@@ -69,19 +83,9 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         temperature=0.0
     )
     
-    risultato_grezzo = response.choices[0].message.content.strip()
-    dati = json.loads(risultato_grezzo)
+    dati = json.loads(response.choices[0].message.content.strip())
     
-    # Pulizia e standardizzazione macro dati
-    dati["squadra"] = pulisci_testo(dati.get("squadra", ""))
-    dati["allenatore"] = pulisci_testo(dati.get("allenatore", ""))
-    dati["campionato"] = pulisci_testo(dati.get("campionato", ""))
-    dati["data"] = pulisci_testo(dati.get("data", ""))
-    
-    cap_num = int(dati.get("capitano_num", 0)) if str(dati.get("capitano_num", "")).isdigit() else 0
-    vice_num = int(dati.get("vice_capitano_num", 0)) if str(dati.get("vice_capitano_num", "")).isdigit() else 0
-    
-    # Mappatura finale ordinata su 20 righe
+    # Mappatura finale ordinata su 20 righe con validazione dell'anno
     giocatori_estratti = {}
     for g in dati.get("giocatori", []):
         try:
@@ -89,16 +93,18 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
             if 1 <= num <= 20:
                 giocatori_estratti[num] = {
                     "cognome_nome": pulisci_testo(g.get("cognome_nome", "")),
-                    "anno_nascita": pulisci_testo(g.get("anno_nascita", ""))
+                    "anno_nascita": normalizza_anno(g.get("anno_nascita", "")) # APPLICAZIONE FILTRO
                 }
         except:
             continue
             
     lista_20_giocatori = []
+    cap_num = int(dati.get("capitano_num", 0)) if str(dati.get("capitano_num", "")).isdigit() else 0
+    vice_num = int(dati.get("vice_capitano_num", 0)) if str(dati.get("vice_capitano_num", "")).isdigit() else 0
+
     for i in range(1, 21):
         if i in giocatori_estratti:
             nome_giocatore = giocatori_estratti[i]["cognome_nome"]
-            # Gestione pulita dei tag Capitano e Vice
             if i == cap_num and "(C)" not in nome_giocatore:
                 nome_giocatore += " (C)"
             elif i == vice_num and "(VC)" not in nome_giocatore:
