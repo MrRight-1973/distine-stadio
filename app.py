@@ -17,8 +17,9 @@ st.set_page_config(page_title="Azzurra Due Carrare - Distinte", page_icon="⚽",
 # --- INTERCETTAZIONE E OTTIMIZZAZIONE DOWNLOAD DA QR CODE ---
 if st.query_params.get("download") == "true":
     if os.path.exists("distinta_corrente.pdf") and os.path.getsize("distinta_corrente.pdf") > 0:
-        with open("distinta_corrente.pdf", "rb") as f_pdf:
-            pdf_bytes = f_pdf.read()
+        f_read_pdf = open("distinta_corrente.pdf", "rb")
+        pdf_bytes = f_read_pdf.read()
+        f_read_pdf.close()
         
         # Trasforma il PDF in stringa leggibile dal browser mobile
         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
@@ -186,12 +187,12 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # Link speciale che verrà codificato nel codice QR
                 link_download_diretto = "https://streamlit.app"
                 
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
-                with open("distinta_corrente.json", "w", encoding="utf-8") as f:
-                    json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
+                f_json = open("distinta_corrente.json", "w", encoding="utf-8")
+                json.dump(pacchetto_gara, f_json, ensure_ascii=False, indent=2)
+                f_json.close()
                 
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(f"{link_download_diretto}?download=true")
@@ -202,9 +203,10 @@ else:
                 
                 pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
                 
-# --- SCRITTURA PDF SU DISCO CORRETTA ED INDENTATA ---
-with open("distinta_corrente.pdf", "wb") as f_pdf:
-f_pdf.write(pdf_bytes)
+# --- SCRITTURA PDF SENZA BLOCCO WITH PER EVITARE AL 100% ERRORI DI INDENTAZIONE ---
+f_write_pdf = open("distinta_corrente.pdf", "wb")
+f_write_pdf.write(pdf_bytes)
+f_write_pdf.close()
 st.session_state["pdf_interattivo_pronto"] = pdf_bytes
 st.success("🎉 Distinta pubblicata! Il QR code ora scarica direttamente il PDF A4.")
 render_download_buttons()
