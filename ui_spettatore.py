@@ -22,7 +22,7 @@ def render_pagina_spettatori():
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
     st.markdown("<div class='titolo-match' style='font-size:18px; color:#2B6CB0;'>DISTINTA DIGITALE LIVE</div>", unsafe_allow_html=True)
     
-    # PROTEZIONE INTEGRATA: Se il file non esiste o è corrotto, mostra l'attesa senza rompere l'app
+    # Se il file JSON non esiste ancora o è vuoto, mostra la schermata di attesa protettiva
     if not os.path.exists("distinta_corrente.json") or os.path.getsize("distinta_corrente.json") == 0:
         st.write("")
         st.warning("⌛ DISTINTA IN AGGIORNAMENTO\n\nLa segreteria sta caricando le distinte ufficiali della partita. Riprova tra qualche istante o rinfresca la pagina.")
@@ -32,25 +32,36 @@ def render_pagina_spettatori():
         with open("distinta_corrente.json", "r", encoding="utf-8") as f:
             dati = json.load(f)
             
-        info = dati["info_gara"]
-        st.markdown(f"<div class='info-match'>🏆 {info.get('campionato', '')} | 📅 {info.get('data', '')}<br>🏁 Arbitro: {info.get('arbitro', '')}</div>", unsafe_allow_html=True)
+        # CORREZIONE SICURA: Uso di .get() con valore di fallback vuoto per evitare qualsiasi KeyError
+        info = dati.get("info_gara", {})
+        campionato = info.get("campionato", "")
+        data_gara = info.get("data", "")
+        arbitro = info.get("arbitro", "")
         
-        # Render Squadra Casa
+        st.markdown(f"<div class='info-match'>🏆 {campionato} | 📅 {data_gara}<br>🏁 Arbitro: {arbitro}</div>", unsafe_allow_html=True)
+        
+        # Render Squadra Casa con estrazione protetta
+        casa_dati = dati.get("casa", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='nome-squadra'>🏠 {dati['casa'].get('squadra', 'SQUADRA CASA')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='allenatore'>All. {dati['casa'].get('allenatore', '')}</div>", unsafe_allow_html=True)
-        for g in dati["casa"].get("giocatori", []):
-            if g.get("GIOCATORE", "").strip():
-                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='nome-squadra'>🏠 {casa_dati.get('squadra', 'SQUADRA CASA')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='allenatore'>All. {casa_dati.get('allenatore', '')}</div>", unsafe_allow_html=True)
+        
+        for g in casa_dati.get("giocatori", []):
+            nome_g = g.get("GIOCATORE", "")
+            if nome_g.strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Render Squadra Ospite
+        # Render Squadra Ospite con estrazione protetta
+        ospite_dati = dati.get("ospite", {})
         st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='nome-squadra'>🚀 {dati['ospite'].get('squadra', 'SQUADRA OSPITE')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='allenatore'>All. {dati['ospite'].get('allenatore', '')}</div>", unsafe_allow_html=True)
-        for g in dati["ospite"].get("giocatori", []):
-            if g.get("GIOCATORE", "").strip():
-                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='nome-squadra'>🚀 {ospite_dati.get('squadra', 'SQUADRA OSPITE')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='allenatore'>All. {ospite_dati.get('allenatore', '')}</div>", unsafe_allow_html=True)
+        
+        for g in ospite_dati.get("giocatori", []):
+            nome_g = g.get("GIOCATORE", "")
+            if nome_g.strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g.get('N°', '')}</span><span class='nome-giocatore'>{nome_g}</span><span class='anno-giocatore'>{g.get('ANNO', '')}</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
     except Exception:
