@@ -4,7 +4,6 @@ import os
 
 def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
-    # Stile CSS per rendere l'interfaccia mobile eccezionale (Colori Azzurra Due Carrare)
     st.markdown("""
         <style>
         .main { background-color: #F0F4F8; }
@@ -23,32 +22,39 @@ def render_pagina_spettatori():
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
     st.markdown("<div class='titolo-match' style='font-size:18px; color:#2B6CB0;'>DISTINTA DIGITALE LIVE</div>", unsafe_allow_html=True)
     
-    if not os.path.exists("distinta_corrente.json"):
-        st.info("⌛ Nessuna partita caricata per la giornata odierna. La segreteria sta aggiornando le liste.")
+    # PROTEZIONE INTEGRATA: Se il file non esiste o è corrotto, mostra l'attesa senza rompere l'app
+    if not os.path.exists("distinta_corrente.json") or os.path.getsize("distinta_corrente.json") == 0:
+        st.write("")
+        st.warning("⌛ DISTINTA IN AGGIORNAMENTO\n\nLa segreteria sta caricando le distinte ufficiali della partita. Riprova tra qualche istante o rinfresca la pagina.")
         return
         
-    with open("distinta_corrente.json", "r", encoding="utf-8") as f:
-        dati = json.load(f)
+    try:
+        with open("distinta_corrente.json", "r", encoding="utf-8") as f:
+            dati = json.load(f)
+            
+        info = dati["info_gara"]
+        st.markdown(f"<div class='info-match'>🏆 {info.get('campionato', '')} | 📅 {info.get('data', '')}<br>🏁 Arbitro: {info.get('arbitro', '')}</div>", unsafe_allow_html=True)
         
-    info = dati["info_gara"]
-    st.markdown(f"<div class='info-match'>🏆 {info['campionato']} | 📅 {info['data']}<br>🏁 Arbitro: {info['arbitro']}</div>", unsafe_allow_html=True)
-    
-    # Render Squadra Casa
-    st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
-    st.markdown(f"<div class='nome-squadra'>🏠 {dati['casa']['squadra']}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='allenatore'>All. {dati['casa']['allenatore']}</div>", unsafe_allow_html=True)
-    for g in dati["casa"]["giocatori"]:
-        if g["GIOCATORE"].strip():
-            st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Render Squadra Ospite
-    st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
-    st.markdown(f"<div class='nome-squadra'>🚀 {dati['ospite']['squadra']}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='allenatore'>All. {dati['ospite']['allenatore']}</div>", unsafe_allow_html=True)
-    for g in dati["ospite"]["giocatori"]:
-        if g["GIOCATORE"].strip():
-            st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-    
+        # Render Squadra Casa
+        st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='nome-squadra'>🏠 {dati['casa'].get('squadra', 'SQUADRA CASA')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='allenatore'>All. {dati['casa'].get('allenatore', '')}</div>", unsafe_allow_html=True)
+        for g in dati["casa"].get("giocatori", []):
+            if g.get("GIOCATORE", "").strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Render Squadra Ospite
+        st.markdown("<div class='card-squadra'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='nome-squadra'>🚀 {dati['ospite'].get('squadra', 'SQUADRA OSPITE')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='allenatore'>All. {dati['ospite'].get('allenatore', '')}</div>", unsafe_allow_html=True)
+        for g in dati["ospite"].get("giocatori", []):
+            if g.get("GIOCATORE", "").strip():
+                st.markdown(f"<div class='riga-giocatore'><span class='num-maglia'>{g['N°']}</span><span class='nome-giocatore'>{g['GIOCATORE']}</span><span class='anno-giocatore'>{g['ANNO']}</span></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    except Exception:
+        st.warning("⌛ Aggiornamento liste in corso da parte della segreteria...")
+        return
+        
     st.markdown("<p style='text-align:center; color:#A0AEC0; font-size:11px;'>Servizio Distinte Ufficiali Azzurra Due Carrare</p>", unsafe_allow_html=True)
