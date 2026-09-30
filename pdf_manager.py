@@ -106,11 +106,11 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         buf_qr = io.BytesIO(qr_code_bytes)
         img_qr_pdf = RLImage(buf_qr, width=90, height=90)
         
-        t_qr_footer = Table([
-            [img_qr_pdf],
-            [Spacer(1, 3)],
-            [Paragraph("INQUADRA DA SMARTPHONE PER SCARICARE DIRETTAMENTE IL PDF DELLA DISTINTA", qr_text_style)]
-        ], colWidths=[520])
+t_qr_footer = Table([
+    [img_qr_pdf],
+    [Spacer(1, 3)],
+    [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
+], colWidths=[520]) # <--- Nel file originale era colWidths= senza parentesi quadre o cifre a causa di un troncamento
         
         t_qr_footer.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
