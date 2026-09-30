@@ -9,10 +9,10 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
-# CONFIGURAZIONE INIZIALE DELLA PAGINA (Fatta una sola volta in cima per evitare crash)
+# 1. PRIMA ISTRUZIONE ASSOLUTA DELLA PAGINA (Risolve il loop del cerchio blu)
 st.set_page_config(page_title="Distinte Live - Azzurra Due Carrare", page_icon="⚽", layout="wide")
 
-# ABBATTIMENTO DEI BADGE E STRUTTURE STREAMLIT CLOUD
+# 2. INIEZIONE DELLO STILE CSS DOPO LA CONFIGURAZIONE INIZIALE
 st.markdown("""
     <style>
     [data-testid="stStatusWidget"],
@@ -50,7 +50,7 @@ st.markdown("""
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
 
-# Inizializzazione Session State sicura senza loop
+# Inizializzazione Session State sicura
 if "vista_attiva" not in st.session_state:
     st.session_state["vista_attiva"] = "pubblica"
 
@@ -160,7 +160,7 @@ else:
                 qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
                 
                 st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta pubblicata! PDF Generato.")
+                st.success("🎉 Distinta online pubblicata con successo! PDF Pronto.")
                 st.rerun()
 
     render_download_buttons()
