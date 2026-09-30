@@ -7,7 +7,7 @@ from estrattore import analizza_distinta
 from pdf_manager import genera_pdf
 from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
-from ui_spettatore import render_pagina_spettatori
+from ui_spettatore import genera_html_tifosi
 
 # RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
