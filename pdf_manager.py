@@ -109,7 +109,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         t_qr_footer = Table([
             [img_qr_pdf],
             [Spacer(1, 3)],
-            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
+            [Paragraph("INQUADRA DA SMARTPHONE PER SCARICARE DIRETTAMENTE IL PDF DELLA DISTINTA", qr_text_style)]
         ], colWidths=[520])
         
         t_qr_footer.setStyle(TableStyle([
