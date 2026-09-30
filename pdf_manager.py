@@ -32,21 +32,34 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     t_info.setStyle(TableStyle([('BOTTOMPADDING', (0,0), (-1,-1), 1.5), ('TOPPADDING', (0,0), (-1,-1), 1.5)]))
     elementi_sinistra.append(t_info)
     
-    # Lettura locale del logo societario in alto a destra
+    # Lettura locale del logo societario con calcolo automatico dell'Aspect Ratio
     img_logo = None
     nome_file_logo = "logo_azzurra.png"
     if os.path.exists(nome_file_logo):
         try:
-            img_logo = RLImage(nome_file_logo, width=45, height=45)
+            # Creiamo un'istanza temporanea dell'immagine per estrarne le proporzioni native
+            img_temporanea = RLImage(nome_file_logo)
+            w_originale = img_temporanea.drawWidth
+            h_originale = img_temporanea.drawHeight
+            
+            # Fissiamo la larghezza desiderata nel PDF e calcoliamo l'altezza proporzionale
+            larghezza_target = 50.0
+            altezza_proporzionale = (h_originale / w_originale) * larghezza_target
+            
+            # Generiamo l'immagine finale perfettamente proporzionata
+            img_logo = RLImage(nome_file_logo, width=larghezza_target, height=altezza_proporzionale)
         except Exception:
             img_logo = None
 
     # Composizione dell'intestazione superiore
     if img_logo:
-        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[495, 45])
-        t_header.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
+        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[450, 100])
+        t_header.setStyle(TableStyle([
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),
+            ('VALIGN', (1,0), (1,0), 'MIDDLE')
+        ]))
     else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[495, 45])
+        t_header = Table([[elementi_sinistra, ""]], colWidths=[450, 100])
         
     t_header.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -56,7 +69,6 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     story.append(t_header)
     story.append(Spacer(1, 6))
     
-    # Funzione interna per strutturare la griglia dei 20 giocatori
     def genera_tabella_squadra(dati):
         elementi_squadra = [
             Paragraph(f"<b>{dati.get('squadra', 'SQUADRA')}</b>", team_title_style),
@@ -72,7 +84,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
                 Paragraph(str(g.get('ANNO', '')), normal_style)
             ])
             
-        t = Table(tabella_dati, colWidths=[25, 185, 40])
+        t = Table(tabella_dati, colWidths=[30, 185, 45])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2.2),
@@ -84,7 +96,7 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         return elementi_squadra
 
     # Inserimento delle due tabelle affiancate
-    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[250, 40, 250])
+    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[260, 30, 260])
     macro_tabella.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
@@ -92,18 +104,17 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     ]))
     story.append(macro_tabella)
     
-    # STRUTTURA DEL BLOCCO QR CODE IN FONDO
+    # Blocco QR Code centrato in fondo
     if qr_code_bytes:
         story.append(Spacer(1, 15))
         buf_qr = io.BytesIO(qr_code_bytes)
-        # Dimensione del QR code aumentata a 90x90 punti per renderlo più grande e leggibile
         img_qr_pdf = RLImage(buf_qr, width=90, height=90)
         
         t_qr_footer = Table([
             [img_qr_pdf],
             [Spacer(1, 3)],
             [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE AL GESTIONALE UFFICIALE", qr_text_style)]
-        ], colWidths=[540])
+        ], colWidths=[550])
         
         t_qr_footer.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
