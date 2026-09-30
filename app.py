@@ -12,12 +12,38 @@ from ui_spettatore import render_pagina_spettatori
 # RIMOZIONE DEFINITIVA DEI LOGHI ESTERNI (OTTIMIZZATO PC + MOBILE)
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stToolbar"] {visibility: hidden !important;}
+    /* 1. ABBATTIMENTO DEI CONTENITORI SPECIFICI DI STREAMLIT CLOUD */
+    [data-testid="stStatusWidget"],
+    [data-testid="stFooter"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    div[class*="viewerBadge"],
+    div[class*="StatusWidget"],
+    div[class*="StyledEmbedControlBar"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0px !important;
+        max-height: 0px !important;
+        width: 0px !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* 2. ELIMINAZIONE DEL CUSCINETTO DI SPAZIO CHE IL TELEFONO CREA PER IL BADGE */
+    iframe {
+        display: none !important;
+    }
+    .stApp {
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
 user_agent = st.context.headers.get("User-Agent", "").lower()
