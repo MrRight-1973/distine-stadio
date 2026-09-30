@@ -9,6 +9,25 @@ from squadra_manager import render_colonna_squadra
 from ui_components import render_info_match, render_download_buttons
 from ui_spettatore import render_pagina_spettatori
 
+# INIEZIONE CSS PER NASCONDERE L'ICONA GITHUB, LA STELLA, IL MENU E IL FOOTER DI STREAMLIT
+st.markdown("""
+    <style>
+    /* Nasconde l'icona di GitHub e la stella in alto a destra */
+    .viewerBadge_container__1QS13, .viewerBadge_link__1QS13, a[href*="github.com"] {
+        display: none !important;
+    }
+    /* Nasconde il menu a tre linee in alto a destra e il pulsante di deploy */
+    #MainMenu, header, .stAppDeployButton {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    /* Nasconde la scritta "Made with Streamlit" in fondo alla pagina */
+    footer {
+        visibility: hidden !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Estrazione sicura dello User-Agent per identificare i telefoni ed evitare errori sul server
 user_agent = st.context.headers.get("User-Agent", "").lower()
 is_mobile = any(OS_mobile in user_agent for OS_mobile in ["android", "iphone", "ipad", "iemobile", "opera mini"])
@@ -114,15 +133,12 @@ else:
                 dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
                 dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
                 
-                # FORZATURA RIGIDA: Il link caricato all'interno del QR Code punta al dominio ufficiale pulito
-                link_pubblico_spettatori = "https://distinte-duecarrare.streamlit.app/"
+                link_pubblico_spettatori = "https://streamlit.app"
                 
-                # Salva il file JSON condiviso sul server cloud
                 pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
                 with open("distinta_corrente.json", "w", encoding="utf-8") as f:
                     json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
                 
-                # Generazione pulita ad alto contrasto del QR Code (Niente TinyURL, link diretto e scolpito)
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
                 qr.add_data(link_pubblico_spettatori)
                 qr.make(fit=True)
