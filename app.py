@@ -136,25 +136,20 @@ else:
             dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["all_ospite"])
 
         st.markdown("---")
-        if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("Pubblicazione dati e scrittura PDF..."):
-                dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
-                dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
-                
-                link_pubblico_spettatori = "https://distine-stadio.streamlit.app/?embed=true"
-                
-                pacchetto_gara = {"info_gara": info_gara, "casa": dati_c, "ospite": dati_o}
-                with open("distinta_corrente.json", "w", encoding="utf-8") as f:
-                    json.dump(pacchetto_gara, f, ensure_ascii=False, indent=2)
-                
-                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-                qr.add_data(link_pubblico_spettatori)
-                qr.make(fit=True)
-                
-                buf_qr = io.BytesIO()
-                qr.make_image(fill_color="black", back_color="white").save(buf_qr, format="PNG")
-                
-                st.session_state["pdf_interattivo_pronto"] = genera_pdf(dati_c, dati_o, info_gara, buf_qr.getvalue())
-                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
-
-    render_download_buttons()
+# --- Dentro app.py, sotto il bottone Fase 3 ---
+if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
+    with st.spinner("Pubblicazione dati e scrittura PDF..."):
+        dati_c["giocatori"] = st.session_state["griglia_casa"].reset_index().to_dict(orient="records")
+        dati_o["giocatori"] = st.session_state["griglia_ospite"].reset_index().to_dict(orient="records")
+        
+        link_pubblico_spettatori = "https://streamlit.app"
+        
+        # Generiamo il PDF
+        pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, None) # Rimosso QR code se non serve più nel PDF, o lascialo se vuoi
+        st.session_state["pdf_interattivo_pronto"] = pdf_bytes
+        
+        # SALVATAGGIO FISICO DEL PDF SUL SERVER PER I TIFOSI
+        with open("distinta_ultimo_match.pdf", "wb") as f:
+            f.write(pdf_bytes)
+            
+        st.success("🎉 Distinta pubblicata con successo! I tifosi ora possono scaricare il PDF.")
