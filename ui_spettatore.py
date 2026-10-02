@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 
 # Percorso assoluto: indipendente dalla cartella di lavoro
 FILE_DISTINTA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "distinta_corrente.json")
+FILE_PDF = os.path.join(os.path.dirname(os.path.abspath(__file__)), "distinta_corrente.pdf")
 
 CSS = """
 <style>
@@ -90,9 +91,30 @@ def _contenuto_distinta():
         st.warning("⌛ Aggiornamento liste in corso da parte della segreteria...")
 
 
+def _render_pulsante_pdf():
+    """Pulsante grande in cima: chi inquadra il QR scarica il PDF con un solo tocco."""
+    if not os.path.exists(FILE_PDF):
+        return
+    try:
+        with open(FILE_PDF, "rb") as f:
+            dati_pdf = f.read()
+    except OSError:
+        return
+    st.download_button(
+        label="📄 SCARICA LA DISTINTA (PDF)",
+        data=dati_pdf,
+        file_name="distinta_ufficiale_A4.pdf",
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True,
+        key="dl_pdf_spettatori",
+    )
+
+
 def render_pagina_spettatori():
     """Mostra la distinta in tempo reale ottimizzata per gli smartphone dei tifosi"""
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown("<div class='titolo-match'>⚽ AZZURRA DUE CARRARE</div>", unsafe_allow_html=True)
     st.markdown("<div class='titolo-match' style='font-size:18px; color:#2B6CB0;'>DISTINTA DIGITALE LIVE</div>", unsafe_allow_html=True)
+    _render_pulsante_pdf()
     _contenuto_distinta()

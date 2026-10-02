@@ -17,7 +17,7 @@ from squadra_manager import (
     reset_stato_squadra,
 )
 from ui_components import render_download_buttons, render_info_match
-from ui_spettatore import FILE_DISTINTA, render_pagina_spettatori
+from ui_spettatore import FILE_DISTINTA, FILE_PDF, render_pagina_spettatori
 
 # Deve essere il PRIMO comando Streamlit
 st.set_page_config(page_title="Distinta Digitale - Azzurra Due Carrare", page_icon="⚽", layout="wide")
@@ -50,6 +50,14 @@ def salva_distinta(pacchetto):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(pacchetto, f, ensure_ascii=False, indent=2)
     os.replace(tmp, FILE_DISTINTA)
+
+
+def salva_pdf_pubblico(pdf_bytes):
+    """Salva il PDF sul server perché gli spettatori (altre sessioni) possano scaricarlo."""
+    tmp = FILE_PDF + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(pdf_bytes)
+    os.replace(tmp, FILE_PDF)
 
 
 def genera_qr_png(link):
@@ -168,11 +176,10 @@ def render_segreteria():
                 dati_o = {**dati_o, "giocatori": giocatori_da_griglia("griglia_ospite")}
 
                 link_pubblico = leggi_secret("LINK_PUBBLICO", LINK_PUBBLICO_DEFAULT)
+                pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, genera_qr_png(link_pubblico))
+                salva_pdf_pubblico(pdf_bytes)
                 salva_distinta({"info_gara": info_gara, "casa": dati_c, "ospite": dati_o})
-
-                st.session_state["pdf_interattivo_pronto"] = genera_pdf(
-                    dati_c, dati_o, info_gara, genera_qr_png(link_pubblico)
-                )
+                st.session_state["pdf_interattivo_pronto"] = pdf_bytes
                 st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
 
     render_download_buttons()
