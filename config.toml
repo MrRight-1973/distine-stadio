@@ -1,0 +1,7 @@
+[client]
+# "viewer": vista da app pubblicata, senza opzioni da sviluppatore.
+# Usa "minimal" per nascondere anche le voci rimanenti del menu.
+toolbarMode = "minimal"
+
+[ui]
+hideTopBar = true

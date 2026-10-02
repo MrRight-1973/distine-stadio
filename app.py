@@ -24,24 +24,8 @@ st.set_page_config(page_title="Distinta Digitale - Azzurra Due Carrare", page_ic
 
 LINK_PUBBLICO_DEFAULT = "https://distine-stadio.streamlit.app/"
 
-# DISATTIVAZIONE INTERAZIONE LOGHI ESTERNI (PC + MOBILE)
-st.markdown("""
-    <style>
-    .viewerBadge_container__1QS13,
-    div[class*="viewerBadge"],
-    a[href*="streamlit.io"],
-    a[href*="github.com"],
-    footer,
-    div[data-testid="stFooter"],
-    header,
-    .stAppDeployButton {
-        pointer-events: none !important;
-        opacity: 0 !important;
-        background: transparent !important;
-    }
-    .block-container { padding-top: 1rem !important; }
-    </style>
-""", unsafe_allow_html=True)
+# Menu, Deploy e barra superiore si nascondono da .streamlit/config.toml
+st.markdown("<style>.block-container { padding-top: 1rem !important; }</style>", unsafe_allow_html=True)
 
 
 def leggi_secret(nome, default=None):
