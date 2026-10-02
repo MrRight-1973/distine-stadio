@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import time
 import unicodedata
 from datetime import datetime, timezone
 
@@ -144,9 +145,14 @@ def leggi_sponsor_pubblicati(token, repo, branch=None):
         nome_f = str(v.get("file", "")) if isinstance(v, dict) else ""
         if not _NOME_FILE_VALIDO.match(nome_f):
             continue
-        png = leggi_file(token, repo, f"{CARTELLA}/{nome_f}", branch)
+        png = None
+        for tentativo in range(3):  # un file appena pubblicato può impiegare qualche secondo a essere leggibile
+            png = leggi_file(token, repo, f"{CARTELLA}/{nome_f}", branch)
+            if png is not None:
+                break
+            time.sleep(1.0)
         if png is None:
-            continue  # file mancante: lo si salta, il resto resta utilizzabile
+            continue  # file davvero mancante: lo si salta, il resto resta utilizzabile
         risultato.append({"nome": str(v.get("nome") or nome_f), "png": png, "file": nome_f})
     return risultato
 

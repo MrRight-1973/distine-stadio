@@ -25,9 +25,7 @@ CHIAVE_UPLOADER = "sponsor_uploader_n"
 COLONNE_ANTEPRIMA = 5
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def _sponsor_pubblicati(token, repo, branch):
-    return leggi_sponsor_pubblicati(token, repo, branch)
+CHIAVE_PER_PDF = "sponsor_per_pdf"   # loghi (bytes) da stampare nel PDF, come caricati o salvati in questa sessione
 
 
 def loghi_per_pdf(token, repo, branch=None):
@@ -35,9 +33,15 @@ def loghi_per_pdf(token, repo, branch=None):
 
     Restituisce (loghi, avviso). loghi è None quando non si possono leggere da GitHub
     o non c'è ancora un elenco: in quel caso il PDF usa la cartella locale di riserva.
+
+    Se la sezione Sponsor li ha già caricati o salvati in questa sessione si usano quelli:
+    sono per definizione i più recenti, mentre GitHub subito dopo un salvataggio può ancora
+    rispondere con i dati vecchi.
     """
+    if CHIAVE_PER_PDF in st.session_state:
+        return st.session_state[CHIAVE_PER_PDF], None
     try:
-        voci = _sponsor_pubblicati(token, repo, branch)
+        voci = leggi_sponsor_pubblicati(token, repo, branch)
     except PubblicazioneErrore as e:
         return None, f"Sponsor non letti da GitHub ({e}). Uso quelli della cartella locale."
     if voci is None:
@@ -91,13 +95,15 @@ def _aggiungi(file_caricati):
 def _carica_dalla_pubblicazione(token, repo, branch):
     """Porta in sessione gli sponsor oggi pubblicati. False se non è stato possibile."""
     try:
-        pubblicati = _sponsor_pubblicati(token, repo, branch)
+        pubblicati = leggi_sponsor_pubblicati(token, repo, branch)
     except PubblicazioneErrore as e:
         st.error(f"Non riesco a leggere gli sponsor da GitHub: {e}")
         return False
     lista = [{"nome": v["nome"], "png": v["png"]} for v in (pubblicati or [])]
     st.session_state[CHIAVE_LISTA] = lista
     st.session_state[CHIAVE_FIRMA_SALVATA] = _firma(lista)
+    # nessun elenco su GitHub (None) -> il PDF userà la cartella locale di riserva
+    st.session_state[CHIAVE_PER_PDF] = None if pubblicati is None else [s["png"] for s in lista]
     return True
 
 
@@ -160,11 +166,14 @@ def render_gestione_sponsor(token, repo, branch=None):
                 except (PubblicazioneErrore, ValueError) as e:
                     st.error(f"❌ Sponsor non pubblicati: {e}")
                 else:
-                    _sponsor_pubblicati.clear()
-                    st.session_state.pop(CHIAVE_LISTA, None)  # al prossimo giro si rileggono da GitHub
+                    st.session_state[CHIAVE_FIRMA_SALVATA] = _firma(lista)
+                    st.session_state[CHIAVE_PER_PDF] = [s["png"] for s in lista]
+                    # il PDF già generato non contiene gli sponsor nuovi: va rifatto con "Pubblica"
+                    st.session_state.pop("pdf_interattivo_pronto", None)
                     st.session_state[CHIAVE_MESSAGGI] = [(
                         "success",
-                        f"✅ {len(lista)} sponsor pubblicati. Il PDF li usa da subito; "
-                        "la pagina spettatori si aggiorna entro 1-2 minuti.",
+                        f"✅ {len(lista)} sponsor pubblicati. La pagina spettatori si aggiorna entro 1-2 minuti. "
+                        "Il PDF già generato è stato scartato: premi di nuovo 'Pubblica su Web e Genera PDF' "
+                        "per averlo con gli sponsor aggiornati.",
                     )]
                     st.rerun()
