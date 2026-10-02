@@ -126,16 +126,21 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None, sponsor_loghi=None):
         Spacer(1, 4),
     ]
 
+    def campo(etichetta, chiave):
+        valore = _esc(info_gara.get(chiave)).strip() or "—"
+        return Paragraph(f"<b>{etichetta}:</b> {valore}", info_style)
+
+    # Il campionato ha una riga intera (anche se lungo resta su una riga sola);
+    # sotto, due colonne ordinate: data / arbitro e assistenti.
     tabella_info_dati = [
-        [Paragraph(f"<b>CAMPIONATO:</b> {_esc(info_gara.get('campionato'))}", info_style),
-         Paragraph(f"<b>ARBITRO:</b> {_esc(info_gara.get('arbitro'))}", info_style)],
-        [Paragraph(f"<b>DATA GARA:</b> {_esc(info_gara.get('data'))}", info_style),
-         Paragraph(f"<b>ASSISTENTE 1:</b> {_esc(info_gara.get('assistente1'))}", info_style)],
-        [Paragraph("", info_style),
-         Paragraph(f"<b>ASSISTENTE 2:</b> {_esc(info_gara.get('assistente2'))}", info_style)],
+        [campo("CAMPIONATO", "campionato"), ""],
+        [campo("DATA GARA", "data"), campo("ARBITRO", "arbitro")],
+        [campo("ASSISTENTE 1", "assistente1"), campo("ASSISTENTE 2", "assistente2")],
     ]
-    t_info = Table(tabella_info_dati, colWidths=[225, 225])
+    t_info = Table(tabella_info_dati, colWidths=[200, 260])
     t_info.setStyle(TableStyle([
+        ('SPAN', (0, 0), (1, 0)),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
         ('TOPPADDING', (0, 0), (-1, -1), 1.5),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
