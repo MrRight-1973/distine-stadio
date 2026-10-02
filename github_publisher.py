@@ -24,7 +24,7 @@ def normalizza_repo(repo):
     if not repo:
         return ""
     r = str(repo).strip().strip("/")
-    r = re.sub(r"^https?://(www\.)?github\.com/", "", r, flags=re.IGNORECASE)
+    r = re.sub(r"^(?:https?://)?(?:www\.)?github\.com/", "", r, flags=re.IGNORECASE)
     r = re.sub(r"\.git$", "", r)
     return r.strip("/")
 
