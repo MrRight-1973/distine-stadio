@@ -1,12 +1,5 @@
 import streamlit as st
 
-def svuota_scansione():
-    """Cancella i dati mappati per consentire una nuova lettura pulita"""
-    if "dati_mappati" in st.session_state:
-        del st.session_state["dati_mappati"]
-    if "pdf_interattivo_pronto" in st.session_state:
-        del st.session_state["pdf_interattivo_pronto"]
-    st.rerun()
 
 def render_info_match(info):
     """Mostra i campi di input della terna arbitrale e informazioni gara"""
@@ -22,16 +15,16 @@ def render_info_match(info):
         ass2 = st.text_input("🚩 Assistente Arbitrale 2", value="")
     return {"campionato": campionato, "data": data, "arbitro": arbitro, "assistente1": ass1, "assistente2": ass2}
 
+
 def render_download_buttons():
     """Mostra l'unico pulsante ufficiale per scaricare il PDF generato"""
     if "pdf_interattivo_pronto" in st.session_state:
         st.write("")
-        # Utilizza l'intera larghezza per rendere l'azione principale chiara e scannabile
         st.download_button(
             label="💾 SCARICA DISTINTA UFFICIALE GENERATA (PDF)",
             data=st.session_state["pdf_interattivo_pronto"],
             file_name="distinta_ufficiale_A4.pdf",
             mime="application/pdf",
             type="primary",
-            use_container_width=True
+            use_container_width=True,
         )

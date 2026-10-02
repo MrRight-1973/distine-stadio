@@ -1,53 +1,87 @@
 import base64
-import json
 import io
+import json
 import re
-from PIL import Image
+from datetime import datetime
+
 from openai import OpenAI
+from PIL import Image, ImageOps
+
+MODELLO = "gpt-4o"
+VALORI_VUOTI = {"", "N.D.", "ND", "N/A", "NONE", "NULL", "NON INDICATO"}
+ETA_MINIMA_GIOCATORE = 5
+ANNO_MINIMO = 1940
+
 
 def pulisci_testo(testo):
     """Rimuove caratteri speciali inutili e standardizza in MAIUSCOLO"""
-    if not testo or str(testo).strip() in ["", "N.D.", "NONE", "NULL", "NON INDICATO"]:
+    if testo is None:
         return ""
-    testo_pulito = str(testo).replace("_", " ")
-    testo_pulito = re.sub(r'\s+', ' ', testo_pulito)
-    return testo_pulito.strip().upper()
+    pulito = str(testo).replace("_", " ")
+    pulito = re.sub(r"\s+", " ", pulito).strip().upper()
+    return "" if pulito in VALORI_VUOTI else pulito
+
 
 def normalizza_anno(anno_grezzo):
-    """Isola l'anno numerico e lo forza rigorosamente nel formato a 4 cifre (YYYY)"""
-    if not anno_grezzo:
+    """Isola l'anno di nascita e lo restituisce nel formato a 4 cifre (YYYY).
+
+    Accetta sia 2 cifre (es. "04") sia 4 cifre. Il range e' coerente per
+    entrambi i formati: da ANNO_MINIMO a (anno corrente - ETA_MINIMA_GIOCATORE).
+    """
+    if anno_grezzo is None:
         return ""
-    numeri = "".join(re.findall(r'\d+', str(anno_grezzo)))
-    if len(numeri) == 2:
-        anno_int = int(numeri)
-        return str(1900 + anno_int) if anno_int > 50 else str(2000 + anno_int)
-    elif len(numeri) == 4:
-        anno_int = int(numeri)
-        if 1970 <= anno_int <= 2015:
-            return str(anno_int)
+    anno_massimo = datetime.now().year - ETA_MINIMA_GIOCATORE
+
+    # Prende il primo gruppo di cifre lungo 2 o 4 (non unisce gruppi diversi)
+    for gruppo in re.findall(r"\d+", str(anno_grezzo)):
+        if len(gruppo) == 2:
+            anno = 2000 + int(gruppo)
+            if anno > anno_massimo:
+                anno -= 100
+        elif len(gruppo) == 4:
+            anno = int(gruppo)
+        else:
+            continue
+        if ANNO_MINIMO <= anno <= anno_massimo:
+            return str(anno)
+        return ""
     return ""
 
+
+def _to_int(valore, default=0):
+    try:
+        return int(str(valore).strip())
+    except (ValueError, TypeError):
+        return default
+
+
 def encode_image(uploaded_file):
-    """Mantiene alta la risoluzione per l'OCR delle cifre"""
+    """Mantiene alta la risoluzione per l'OCR e corregge l'orientamento EXIF"""
+    uploaded_file.seek(0)
     img = Image.open(uploaded_file)
-    if img.mode in ("RGBA", "P"):
+    img = ImageOps.exif_transpose(img)  # foto da smartphone spesso ruotate nei metadati
+    if img.mode in ("RGBA", "P", "LA"):
         img = img.convert("RGB")
     img.thumbnail((2000, 2000))
     buffer_img = io.BytesIO()
     img.save(buffer_img, format="JPEG", quality=95)
-    return base64.b64encode(buffer_img.getvalue()).decode('utf-8')
+    return base64.b64encode(buffer_img.getvalue()).decode("utf-8")
+
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
     """Estrae SOLO l'allenatore, i giocatori e le date per la specifica squadra"""
-    client = OpenAI(api_key=api_key)
+    if not api_key:
+        raise ValueError("Chiave OPENAI_API_KEY non configurata nei secrets.")
+
+    client = OpenAI(api_key=api_key, timeout=90.0, max_retries=2)
     base64_image = encode_image(uploaded_file)
-    
+
     focus_ruolo = (
         "ATTENZIONE: Stai analizzando la colonna/sezione degli OSPITI. Ignora la squadra di casa."
         if ruolo_squadra == "OSPITE" else
         "ATTENZIONE: Stai analizzando la colonna/sezione dei LOCALI. Ignora la squadra ospite."
     )
-    
+
     prompt_sistema = (
         f"Sei un sistema OCR ad altissima precisione per distinte LND.\n"
         f"{focus_ruolo}\n\n"
@@ -67,67 +101,66 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         "  ]\n"
         "}"
     )
-    
+
     response = client.chat.completions.create(
-        model="gpt-4o",
-        response_format={ "type": "json_object" },
+        model=MODELLO,
+        response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": prompt_sistema},
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": f"Esegui l'estrazione OCR dei giocatori per: {ruolo_squadra}."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]
-            }
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                ],
+            },
         ],
-        temperature=0.0
+        temperature=0.0,
     )
-    
-    # CORREZIONE: Gestione sicura ed esplicita dell'indice delle scelte di risposta dell'API
-    risultato_grezzo = response.choices[0].message.content.strip()
-    
-    if risultato_grezzo.startswith("```"):
-        risultato_grezzo = re.sub(r'^```(?:json)?\n', '', risultato_grezzo)
-        risultato_grezzo = re.sub(r'\n```$', '', risultato_grezzo).strip()
-        
-    dati = json.loads(risultato_grezzo)
-    
-    dati["allenatore"] = pulisci_testo(dati.get("allenatore", ""))
-    dati["campionato"] = pulisci_testo(dati.get("campionato", ""))
-    dati["data"] = pulisci_testo(dati.get("data", ""))
-    
-    giocatori_estratti = {}
-    for g in dati.get("giocatori", []):
-        try:
-            num = int(g.get("numero", 0))
-            if 1 <= num <= 20:
-                giocatori_estratti[num] = {
-                    "cognome_nome": pulisci_testo(g.get("cognome_nome", "")),
-                    "anno_nascita": normalizza_anno(g.get("anno_nascita", ""))
-                }
-        except:
-            continue
-            
-    lista_20_giocatori = []
-    cap_num = int(dati.get("capitano_num", 0)) if str(dati.get("capitano_num", "")).isdigit() else 0
-    vice_num = int(dati.get("vice_capitano_num", 0)) if str(dati.get("vice_capitano_num", "")).isdigit() else 0
 
+    risultato_grezzo = response.choices[0].message.content
+    if not risultato_grezzo:
+        raise ValueError(f"Il modello non ha restituito contenuto per la distinta {ruolo_squadra}.")
+
+    try:
+        dati = json.loads(risultato_grezzo.strip())
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Risposta AI non valida per la distinta {ruolo_squadra}: {e}") from e
+
+    dati["allenatore"] = pulisci_testo(dati.get("allenatore"))
+    dati["campionato"] = pulisci_testo(dati.get("campionato"))
+    dati["data"] = pulisci_testo(dati.get("data"))
+
+    giocatori_estratti = {}
+    for g in dati.get("giocatori") or []:
+        if not isinstance(g, dict):
+            continue
+        num = _to_int(g.get("numero"))
+        if 1 <= num <= 20:
+            giocatori_estratti[num] = {
+                "cognome_nome": pulisci_testo(g.get("cognome_nome")),
+                "anno_nascita": normalizza_anno(g.get("anno_nascita")),
+            }
+
+    cap_num = _to_int(dati.get("capitano_num"))
+    vice_num = _to_int(dati.get("vice_capitano_num"))
+
+    lista_20_giocatori = []
     for i in range(1, 21):
         if i in giocatori_estratti:
             nome_giocatore = giocatori_estratti[i]["cognome_nome"]
-            if i == cap_num and "(C)" not in nome_giocatore:
-                nome_giocatore += " (C)"
-            elif i == vice_num and "(VC)" not in nome_giocatore:
-                nome_giocatore += " (VC)"
-                
+            if nome_giocatore:
+                if i == cap_num and "(C)" not in nome_giocatore:
+                    nome_giocatore += " (C)"
+                elif i == vice_num and "(VC)" not in nome_giocatore:
+                    nome_giocatore += " (VC)"
             lista_20_giocatori.append({
                 "N°": i,
                 "GIOCATORE": nome_giocatore,
-                "ANNO": giocatori_estratti[i]["anno_nascita"]
+                "ANNO": giocatori_estratti[i]["anno_nascita"],
             })
         else:
             lista_20_giocatori.append({"N°": i, "GIOCATORE": "", "ANNO": ""})
-            
+
     dati["giocatori"] = lista_20_giocatori
     return dati

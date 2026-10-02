@@ -1,125 +1,131 @@
 import io
 import os
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from xml.sax.saxutils import escape
+
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image as RLImage
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_azzurra.png")
+
+
+def _esc(valore):
+    """Testo sicuro per i Paragraph di reportlab (che interpretano il markup)."""
+    return "" if valore is None else escape(str(valore))
+
+
+def _carica_logo(larghezza_target=50.0):
+    if not os.path.exists(LOGO_PATH):
+        return None
+    try:
+        w, h = ImageReader(LOGO_PATH).getSize()
+        return RLImage(LOGO_PATH, width=larghezza_target, height=(h / w) * larghezza_target)
+    except Exception:
+        return None
+
 
 def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
     styles = getSampleStyleSheet()
-    
+
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=14, leading=16, textColor=colors.HexColor("#1A365D"), spaceAfter=2)
     info_style = ParagraphStyle('InfoStyle', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor("#2D3748"))
     team_title_style = ParagraphStyle('TeamTitle', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=2, spaceAfter=4)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=9.5)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=8, leading=9.5, fontName="Helvetica-Bold")
     qr_text_style = ParagraphStyle('QrText', parent=styles['Normal'], fontSize=7.5, leading=10, textColor=colors.HexColor("#4A5568"), fontName="Helvetica-Bold", alignment=1)
-    
+
     elementi_sinistra = [
         Paragraph("<b>DISTINTE DI GARA UFFICIALI</b>", title_style),
-        Spacer(1, 4)
+        Spacer(1, 4),
     ]
-    
-    # CORREZIONE: Allineamento e ordine corretto dei dati per evitare testi incrociati o vuoti
+
     tabella_info_dati = [
-        [Paragraph(f"<b>CAMPIONATO:</b> {info_gara['campionato']}", info_style), Paragraph(f"<b>ARBITRO:</b> {info_gara['arbitro']}", info_style)],
-        [Paragraph(f"<b>DATA GARA:</b> {info_gara['data']}", info_style), Paragraph(f"<b>ASSISTENTE 1:</b> {info_gara['assistente1']}", info_style)],
-        [Paragraph("", info_style), Paragraph(f"<b>ASSISTENTE 2:</b> {info_gara['assistente2']}", info_style)]
+        [Paragraph(f"<b>CAMPIONATO:</b> {_esc(info_gara.get('campionato'))}", info_style),
+         Paragraph(f"<b>ARBITRO:</b> {_esc(info_gara.get('arbitro'))}", info_style)],
+        [Paragraph(f"<b>DATA GARA:</b> {_esc(info_gara.get('data'))}", info_style),
+         Paragraph(f"<b>ASSISTENTE 1:</b> {_esc(info_gara.get('assistente1'))}", info_style)],
+        [Paragraph("", info_style),
+         Paragraph(f"<b>ASSISTENTE 2:</b> {_esc(info_gara.get('assistente2'))}", info_style)],
     ]
     t_info = Table(tabella_info_dati, colWidths=[225, 225])
     t_info.setStyle(TableStyle([
-        ('BOTTOMPADDING', (0,0), (-1,-1), 1.5), 
-        ('TOPPADDING', (0,0), (-1,-1), 1.5),
-        ('VALIGN', (0,0), (-1,-1), 'TOP')
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     elementi_sinistra.append(t_info)
-    
-    img_logo = None
-    nome_file_logo = "logo_azzurra.png"
-    if os.path.exists(nome_file_logo):
-        try:
-            img_temporanea = RLImage(nome_file_logo)
-            w_originale = img_temporanea.drawWidth
-            h_originale = img_temporanea.drawHeight
-            larghezza_target = 50.0
-            altezza_proporzionale = (h_originale / w_originale) * larghezza_target
-            img_logo = RLImage(nome_file_logo, width=larghezza_target, height=altezza_proporzionale)
-        except Exception:
-            img_logo = None
 
-    if img_logo:
-        t_header = Table([[elementi_sinistra, img_logo]], colWidths=[460, 50])
-        t_header.setStyle(TableStyle([
-            ('ALIGN', (1,0), (1,0), 'RIGHT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
-        ]))
-    else:
-        t_header = Table([[elementi_sinistra, ""]], colWidths=[460, 50])
-        
+    img_logo = _carica_logo()
+    t_header = Table([[elementi_sinistra, img_logo if img_logo else ""]], colWidths=[460, 50])
     t_header.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('LINEBELOW', (0,0), (-1,-1), 1, colors.HexColor("#CBD5E0")),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6)
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEBELOW', (0, 0), (-1, -1), 1, colors.HexColor("#CBD5E0")),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
     ]))
     story.append(t_header)
     story.append(Spacer(1, 6))
-    
+
     def genera_tabella_squadra(dati):
         elementi_squadra = [
-            Paragraph(f"<b>{dati.get('squadra', 'SQUADRA')}</b>", team_title_style),
-            Paragraph(f"<b>ALLENATORE:</b> {dati.get('allenatore', '')}", normal_style),
-            Spacer(1, 5)
+            Paragraph(f"<b>{_esc(dati.get('squadra') or 'SQUADRA')}</b>", team_title_style),
+            Paragraph(f"<b>ALLENATORE:</b> {_esc(dati.get('allenatore'))}", normal_style),
+            Spacer(1, 5),
         ]
-        
+
         tabella_dati = [[Paragraph("<b>N°</b>", bold_style), Paragraph("<b>GIOCATORE</b>", bold_style), Paragraph("<b>ANNO</b>", bold_style)]]
         for index, g in enumerate(dati.get('giocatori', [])):
             tabella_dati.append([
-                Paragraph(str(g.get('N°', index + 1)), normal_style),
-                Paragraph(str(g.get('GIOCATORE', '')), normal_style),
-                Paragraph(str(g.get('ANNO', '')), normal_style)
+                Paragraph(_esc(g.get('N°') or index + 1), normal_style),
+                Paragraph(_esc(g.get('GIOCATORE')), normal_style),
+                Paragraph(_esc(g.get('ANNO')), normal_style),
             ])
-            
+
         t = Table(tabella_dati, colWidths=[25, 185, 45])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2.2),
-            ('TOPPADDING', (0,0), (-1,-1), 2.2),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E0")),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#E2E8F0")),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.2),
+            ('TOPPADDING', (0, 0), (-1, -1), 2.2),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         elementi_squadra.append(t)
         return elementi_squadra
 
-    macro_tabella = Table([[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]], colWidths=[255, 10, 255])
+    macro_tabella = Table(
+        [[genera_tabella_squadra(casa), Paragraph("", normal_style), genera_tabella_squadra(ospite)]],
+        colWidths=[255, 10, 255],
+    )
     macro_tabella.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('LEFTPADDING', (0,0), (-1,-1), 0),
-        ('RIGHTPADDING', (0,0), (-1,-1), 0)
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
     story.append(macro_tabella)
-    
+
     if qr_code_bytes:
         story.append(Spacer(1, 15))
-        buf_qr = io.BytesIO(qr_code_bytes)
-        img_qr_pdf = RLImage(buf_qr, width=90, height=90)
-        
+        img_qr_pdf = RLImage(io.BytesIO(qr_code_bytes), width=90, height=90)
+
         t_qr_footer = Table([
             [img_qr_pdf],
             [Spacer(1, 3)],
-            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)]
+            [Paragraph("INQUADRA DA SMARTPHONE PER ACCEDERE ALLA DISTINTA DIGITAL LIVE", qr_text_style)],
         ], colWidths=[520])
-        
         t_qr_footer.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0)
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
         ]))
         story.append(t_qr_footer)
-        
+
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
