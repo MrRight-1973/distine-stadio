@@ -1,8 +1,7 @@
-streamlit
+streamlit>=1.37
 pandas
-qrcode
+qrcode[pil]
 pillow
-openai
+openai>=1.0
 reportlab
 requests
-

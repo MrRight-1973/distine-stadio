@@ -1,13 +1,14 @@
 import hmac
 import io
 import json
-import os
+from datetime import datetime, timezone
 
 import pandas as pd
 import qrcode
 import streamlit as st
 
 from estrattore import analizza_distinta
+from github_publisher import PubblicazioneErrore, pubblica_su_github, url_pagina_da_repo
 from pdf_manager import genera_pdf
 from squadra_manager import (
     giocatori_da_griglia,
@@ -17,12 +18,9 @@ from squadra_manager import (
     reset_stato_squadra,
 )
 from ui_components import render_download_buttons, render_info_match
-from ui_spettatore import FILE_DISTINTA, FILE_PDF, render_pagina_spettatori
 
 # Deve essere il PRIMO comando Streamlit
-st.set_page_config(page_title="Distinta Digitale - Azzurra Due Carrare", page_icon="⚽", layout="wide")
-
-LINK_PUBBLICO_DEFAULT = "https://distine-stadio.streamlit.app/"
+st.set_page_config(page_title="Segreteria - Distinta Digitale Azzurra", page_icon="⚽", layout="wide")
 
 # Menu, Deploy e barra superiore si nascondono da .streamlit/config.toml
 st.markdown("<style>.block-container { padding-top: 1rem !important; }</style>", unsafe_allow_html=True)
@@ -36,28 +34,12 @@ def leggi_secret(nome, default=None):
         return default
 
 
-def rileva_mobile():
-    try:
-        user_agent = st.context.headers.get("User-Agent", "").lower()
-    except Exception:  # Streamlit < 1.37
-        return False
-    return any(k in user_agent for k in ["android", "iphone", "ipad", "iemobile", "opera mini"])
-
-
-def salva_distinta(pacchetto):
-    """Scrittura atomica: i tifosi non leggono mai un file a metà."""
-    tmp = FILE_DISTINTA + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(pacchetto, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, FILE_DISTINTA)
-
-
-def salva_pdf_pubblico(pdf_bytes):
-    """Salva il PDF sul server perché gli spettatori (altre sessioni) possano scaricarlo."""
-    tmp = FILE_PDF + ".tmp"
-    with open(tmp, "wb") as f:
-        f.write(pdf_bytes)
-    os.replace(tmp, FILE_PDF)
+def link_pagina_spettatori():
+    """Indirizzo della pagina pubblica (quello del QR code)."""
+    esplicito = leggi_secret("LINK_PUBBLICO")
+    if esplicito:
+        return str(esplicito)
+    return url_pagina_da_repo(str(leggi_secret("GITHUB_REPO", "")))
 
 
 def genera_qr_png(link):
@@ -84,29 +66,82 @@ def reset_solo_dati_ai():
     st.rerun()
 
 
-def render_accesso_segreteria():
-    st.markdown("---")
-    with st.expander("⚙️ Area Riservata Segreteria"):
+def pubblica_distinta(info_gara, dati_c, dati_o):
+    """Genera il PDF e lo pubblica insieme ai dati sul repository della pagina."""
+    link = link_pagina_spettatori()
+    qr_bytes = genera_qr_png(link) if link else None
+
+    pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, qr_bytes)
+    st.session_state["pdf_interattivo_pronto"] = pdf_bytes  # il PDF resta scaricabile anche se GitHub non risponde
+
+    if not link:
+        st.warning("Link della pagina spettatori non configurato: il PDF è stato creato senza QR code.")
+
+    pacchetto = {
+        "info_gara": info_gara,
+        "casa": dati_c,
+        "ospite": dati_o,
+        "aggiornato": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    file_da_pubblicare = {
+        "distinta.json": json.dumps(pacchetto, ensure_ascii=False, indent=2).encode("utf-8"),
+        "distinta.pdf": pdf_bytes,
+    }
+
+    try:
+        pubblica_su_github(
+            token=leggi_secret("GITHUB_TOKEN"),
+            repo=leggi_secret("GITHUB_REPO"),
+            file_da_pubblicare=file_da_pubblicare,
+            messaggio=f"Distinta {dati_c.get('squadra') or 'casa'} - {dati_o.get('squadra') or 'ospite'}",
+            branch=leggi_secret("GITHUB_BRANCH", "main"),
+        )
+    except PubblicazioneErrore as e:
+        st.error(f"❌ Pubblicazione online non riuscita: {e}")
+        st.info("Il PDF è comunque pronto qui sotto. Puoi riprovare a pubblicare.")
+        return
+
+    st.success(
+        "🎉 Distinta inviata a GitHub. La pagina spettatori si aggiorna entro circa 1-2 minuti"
+        + (f": {link}" if link else ".")
+    )
+
+
+def render_login():
+    _, centro, _ = st.columns([1, 2, 1])
+    with centro:
+        st.title("⚽ Segreteria - Distinta Digitale")
+        st.caption("A.S.D. Azzurra Due Carrare")
         password_corretta = leggi_secret("SEGRETERIA_PASSWORD")
         if not password_corretta:
             st.error("Password segreteria non configurata (SEGRETERIA_PASSWORD nei secrets).")
             return
-        password_inserita = st.text_input("Inserisci la password di sblocco", type="password", key="pwd_segreteria")
-        if st.button("Accedi al Pannello Gestionale", type="primary", use_container_width=True):
+        password_inserita = st.text_input("Password", type="password", key="pwd_segreteria")
+        if st.button("Accedi", type="primary", use_container_width=True):
             if hmac.compare_digest(password_inserita.encode(), str(password_corretta).encode()):
-                st.session_state["vista_attiva"] = "segreteria"
+                st.session_state["autenticato"] = True
                 st.rerun()
             else:
                 st.error("❌ Password errata. Accesso negato.")
 
 
 def render_segreteria():
-    if st.button("⬅️ Torna alla Vista Spettatori (Mobile)", type="secondary"):
-        st.session_state["vista_attiva"] = "pubblica"
-        st.rerun()
+    col_titolo, col_esci = st.columns([5, 1])
+    with col_titolo:
+        st.title("⚽ Centro Gestione Gara - Pannello Segreteria")
+    with col_esci:
+        st.write("")
+        if st.button("Esci", type="secondary", use_container_width=True):
+            st.session_state["autenticato"] = False
+            st.rerun()
 
-    st.title("⚽ Centro Gestione Gara - Pannello PC Segreteria")
-    st.write("La conferma delle liste aggiornerà la pagina web in tempo reale e genererà il PDF A4.")
+    link = link_pagina_spettatori()
+    st.write(
+        "La pubblicazione genera il PDF A4 e aggiorna la pagina web degli spettatori"
+        + (f" ({link})." if link else ".")
+    )
+    if not (leggi_secret("GITHUB_TOKEN") and leggi_secret("GITHUB_REPO")):
+        st.warning("GITHUB_TOKEN / GITHUB_REPO non configurati nei secrets: la pubblicazione online non è disponibile.")
 
     api_key_openai = leggi_secret("OPENAI_API_KEY")
     if not api_key_openai:
@@ -171,30 +206,16 @@ def render_segreteria():
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):
-            with st.spinner("Pubblicazione dati e scrittura PDF..."):
+            with st.spinner("Generazione PDF e pubblicazione su GitHub..."):
                 dati_c = {**dati_c, "giocatori": giocatori_da_griglia("griglia_casa")}
                 dati_o = {**dati_o, "giocatori": giocatori_da_griglia("griglia_ospite")}
-
-                link_pubblico = leggi_secret("LINK_PUBBLICO", LINK_PUBBLICO_DEFAULT)
-                pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, genera_qr_png(link_pubblico))
-                salva_pdf_pubblico(pdf_bytes)
-                salva_distinta({"info_gara": info_gara, "casa": dati_c, "ospite": dati_o})
-                st.session_state["pdf_interattivo_pronto"] = pdf_bytes
-                st.success("🎉 Distinta online pubblicata sul link corretto! File PDF pronto.")
+                pubblica_distinta(info_gara, dati_c, dati_o)
 
     render_download_buttons()
 
 
-# --- ROUTING ---
-is_mobile = rileva_mobile()
-
-if "vista_attiva" not in st.session_state:
-    st.session_state["vista_attiva"] = "pubblica"
-
-if st.session_state["vista_attiva"] == "pubblica":
-    render_pagina_spettatori()
-    # L'area riservata si vede su PC, oppure da telefono aprendo il link con ?admin=1
-    if not is_mobile or st.query_params.get("admin") == "1":
-        render_accesso_segreteria()
-else:
+# --- ROUTING: questa app è solo per la segreteria; gli spettatori usano la pagina su GitHub Pages ---
+if st.session_state.get("autenticato"):
     render_segreteria()
+else:
+    render_login()
