@@ -9,7 +9,70 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_azzurra.png")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo_azzurra.png")
+
+# Cartella con i loghi degli sponsor: basta aggiungere/togliere file (png, jpg).
+# L'ordine nel PDF segue l'ordine alfabetico dei nomi file (01_..., 02_..., ecc.).
+SPONSOR_DIR = os.path.join(BASE_DIR, "sponsor")
+SPONSOR_COLONNE = 5          # loghi per riga
+SPONSOR_BOX_W = 100          # dimensione massima del singolo logo (punti)
+SPONSOR_BOX_H = 50
+
+
+def _elenco_sponsor():
+    if not os.path.isdir(SPONSOR_DIR):
+        return []
+    return sorted(
+        os.path.join(SPONSOR_DIR, f)
+        for f in os.listdir(SPONSOR_DIR)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    )
+
+
+def numero_sponsor():
+    """Quanti loghi sponsor verranno stampati nel PDF."""
+    return len(_elenco_sponsor())
+
+
+def _blocco_sponsor(stile_titolo):
+    """Fascia sponsor a griglia; None se non ci sono loghi."""
+    loghi = []
+    for percorso in _elenco_sponsor():
+        try:
+            w, h = ImageReader(percorso).getSize()
+            scala = min(SPONSOR_BOX_W / w, SPONSOR_BOX_H / h)
+            loghi.append(RLImage(percorso, width=w * scala, height=h * scala))
+        except Exception:
+            continue  # un file illeggibile non deve bloccare il PDF
+    if not loghi:
+        return None
+
+    larghezza_cella = SPONSOR_BOX_W + 6
+    altezza_riga = SPONSOR_BOX_H + 8
+    # Una tabella per ogni riga, così l'ultima riga (incompleta) resta centrata
+    righe_tabelle = []
+    for i in range(0, len(loghi), SPONSOR_COLONNE):
+        gruppo = loghi[i:i + SPONSOR_COLONNE]
+        riga = Table([gruppo], colWidths=[larghezza_cella] * len(gruppo), rowHeights=[altezza_riga])
+        riga.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        righe_tabelle.append([riga])
+    griglia = Table(righe_tabelle, colWidths=[520])
+    griglia.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER')]))
+
+    blocco = Table([[Paragraph("I NOSTRI SPONSOR", stile_titolo)], [griglia]], colWidths=[520])
+    blocco.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.8, colors.HexColor("#CBD5E0")),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+    ]))
+    return blocco
 
 
 def _esc(valore):
@@ -125,6 +188,11 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
             ('TOPPADDING', (0, 0), (-1, -1), 0),
         ]))
         story.append(t_qr_footer)
+
+    sponsor = _blocco_sponsor(qr_text_style)
+    if sponsor is not None:
+        story.append(Spacer(1, 14))
+        story.append(sponsor)
 
     doc.build(story)
     buffer.seek(0)

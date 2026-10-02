@@ -7,9 +7,9 @@ import pandas as pd
 import qrcode
 import streamlit as st
 
-from estrattore import analizza_distinta
+from estrattore import analizza_distinta, unisci_scansioni
 from github_publisher import PubblicazioneErrore, pubblica_su_github, url_pagina_da_repo
-from pdf_manager import genera_pdf
+from pdf_manager import genera_pdf, numero_sponsor
 from squadra_manager import (
     giocatori_da_griglia,
     griglia_vuota,
@@ -143,6 +143,13 @@ def render_segreteria():
     if not (leggi_secret("GITHUB_TOKEN") and leggi_secret("GITHUB_REPO")):
         st.warning("GITHUB_TOKEN / GITHUB_REPO non configurati nei secrets: la pubblicazione online non è disponibile.")
 
+    if numero_sponsor() == 0:
+        st.warning(
+            "Nessun logo sponsor trovato: il PDF verrà creato senza la fascia sponsor. "
+            "Controlla che nel repository dell'app ci sia la cartella 'sponsor' con i loghi (.png/.jpg), "
+            "accanto ad app.py."
+        )
+
     api_key_openai = leggi_secret("OPENAI_API_KEY")
     if not api_key_openai:
         st.warning("OPENAI_API_KEY non configurata nei secrets: la scansione AI non è disponibile.")
@@ -183,10 +190,7 @@ def render_segreteria():
                             st.session_state["griglia_ospite"] = pd.DataFrame(ospite_raw["giocatori"]).set_index("N°")
                             pulisci_widget_squadra("griglia_casa")
                             pulisci_widget_squadra("griglia_ospite")
-                            st.session_state["macro_info"] = {
-                                "campionato": casa_raw["campionato"], "data": casa_raw["data"],
-                                "all_casa": casa_raw["allenatore"], "all_ospite": ospite_raw["allenatore"],
-                            }
+                            st.session_state["macro_info"] = unisci_scansioni(casa_raw, ospite_raw)
                             st.session_state["firma_scansione_attiva"] = firma_correnti
                             st.session_state["dati_mappati"] = True
                             st.rerun()
@@ -200,9 +204,14 @@ def render_segreteria():
         inf = st.session_state["macro_info"]
 
         with c_sq1:
-            dati_c = render_colonna_squadra("🏠 SQUADRA CASA", "griglia_casa", inf["all_casa"])
+            dati_c = render_colonna_squadra("🏠 SQUADRA CASA", "griglia_casa", inf["all_casa"], inf.get("nome_casa", ""))
         with c_sq2:
-            dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["all_ospite"])
+            dati_o = render_colonna_squadra("🚀 SQUADRA OSPITE", "griglia_ospite", inf["all_ospite"], inf.get("nome_ospite", ""))
+
+        mancanti = [n for n, v in (("data", inf.get("data")), ("nome squadra casa", inf.get("nome_casa")),
+                                   ("nome squadra ospite", inf.get("nome_ospite"))) if not v]
+        if mancanti:
+            st.info("Non sono riuscito a leggere dalle distinte: " + ", ".join(mancanti) + ". Compilali a mano prima di pubblicare.")
 
         st.markdown("---")
         if st.button("⚡ Fase 3: Pubblica su Web e Genera PDF A4", type="primary", use_container_width=True):

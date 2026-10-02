@@ -48,6 +48,66 @@ def normalizza_anno(anno_grezzo):
     return ""
 
 
+MESI = {
+    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5, "giugno": 6,
+    "luglio": 7, "agosto": 8, "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+    "gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6,
+    "lug": 7, "ago": 8, "set": 9, "sett": 9, "ott": 10, "nov": 11, "dic": 12,
+}
+
+
+def normalizza_data(data_grezza):
+    """Riporta la data della gara nel formato GG/MM/AAAA, oppure "" se non è credibile.
+
+    Accetta 02/11/2025, 2-11-25, 02.11.2025, "2 novembre 2025". Anni a 2 cifre = 20xx.
+    Una data di gara realistica è tra tre anni fa e l'anno prossimo: questo
+    scarta, per esempio, una data di nascita letta per errore.
+    """
+    if not data_grezza:
+        return ""
+    testo = str(data_grezza).strip().lower()
+
+    giorno = mese = anno = None
+    m = re.search(r"(\d{1,2})\s*[/\-.\s]\s*(\d{1,2})\s*[/\-.\s]\s*(\d{4}|\d{2})\b", testo)
+    if m:
+        giorno, mese, anno = int(m[1]), int(m[2]), int(m[3])
+    else:
+        m = re.search(r"(\d{1,2})\s*(?:°|º)?\s*([a-zà]+)\.?\s*(\d{4}|\d{2})\b", testo)
+        if m and m[2] in MESI:
+            giorno, mese, anno = int(m[1]), MESI[m[2]], int(m[3])
+    if anno is None:
+        return ""
+    if anno < 100:
+        anno += 2000
+
+    anno_corrente = datetime.now().year
+    if not (anno_corrente - 3 <= anno <= anno_corrente + 1):
+        return ""
+    try:
+        return datetime(anno, mese, giorno).strftime("%d/%m/%Y")
+    except ValueError:
+        return ""
+
+
+def unisci_scansioni(casa_raw, ospite_raw):
+    """Riunisce i dati letti dalle due distinte, completando ciò che manca in una con l'altra.
+
+    Ogni foto può riportare solo la propria squadra oppure l'intestazione della gara
+    con entrambe: si usa la lettura più diretta e, se manca, quella dell'altra foto.
+    """
+    def primo(*valori):
+        return next((v for v in valori if v), "")
+
+    return {
+        "campionato": primo(casa_raw.get("campionato"), ospite_raw.get("campionato")),
+        "data": primo(casa_raw.get("data"), ospite_raw.get("data")),
+        "nome_casa": primo(casa_raw.get("squadra"), casa_raw.get("squadra_casa"), ospite_raw.get("squadra_casa")),
+        "nome_ospite": primo(ospite_raw.get("squadra"), ospite_raw.get("squadra_ospite"), casa_raw.get("squadra_ospite")),
+        "all_casa": casa_raw.get("allenatore", ""),
+        "all_ospite": ospite_raw.get("allenatore", ""),
+    }
+
+
 def _to_int(valore, default=0):
     try:
         return int(str(valore).strip())
@@ -69,7 +129,7 @@ def encode_image(uploaded_file):
 
 
 def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
-    """Estrae SOLO l'allenatore, i giocatori e le date per la specifica squadra"""
+    """Estrae società, data, campionato, allenatore e giocatori per la specifica squadra"""
     if not api_key:
         raise ValueError("Chiave OPENAI_API_KEY non configurata nei secrets.")
 
@@ -86,11 +146,21 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
         f"Sei un sistema OCR ad altissima precisione per distinte LND.\n"
         f"{focus_ruolo}\n\n"
         "REGOLE RIGIDE DI SCANSIONE:\n"
-        "1. Trova l'Allenatore della sezione indicata.\n"
-        "2. Concentrati sulla colonna dei CALCIATORI e dell'ANNO DI NASCITA riga per riga.\n"
-        "3. Cerca la sigla del Capitano (C, CAP) e del Vice (VC, VICE) accanto al nome o al numero.\n\n"
-        "Rispondi ESCLUSIVAMENTE con questo schema JSON (NON includere il nome della squadra):\n"
+        "1. Trova il NOME DELLA SOCIETA' della sezione indicata (di solito nell'intestazione, vicino a "
+        "'Società' o 'Squadra'), scritto per esteso. Se non è leggibile con certezza usa \"\": non inventarlo.\n"
+        "2. Se la distinta riporta anche l'intestazione della gara (per esempio 'Gara: SQUADRA A - SQUADRA B'), "
+        "riporta in squadra_casa la prima e in squadra_ospite la seconda; altrimenti usa \"\" per entrambe.\n"
+        "3. Trova la DATA DELLA GARA (vicino a 'Data' o 'Data gara') in formato GG/MM/AAAA con anno a 4 cifre. "
+        "NON confonderla con gli anni di nascita dei calciatori né con altre date (rilascio tessere, firme). "
+        "Se non c'è, usa \"\".\n"
+        "4. Trova l'Allenatore della sezione indicata.\n"
+        "5. Concentrati sulla colonna dei CALCIATORI e dell'ANNO DI NASCITA riga per riga.\n"
+        "6. Cerca la sigla del Capitano (C, CAP) e del Vice (VC, VICE) accanto al nome o al numero.\n\n"
+        "Rispondi ESCLUSIVAMENTE con questo schema JSON:\n"
         "{\n"
+        "  \"squadra\": \"NOME SOCIETA' DELLA SEZIONE ANALIZZATA\",\n"
+        "  \"squadra_casa\": \"\",\n"
+        "  \"squadra_ospite\": \"\",\n"
         "  \"allenatore\": \"COGNOME NOME\",\n"
         "  \"capitano_num\": 10,\n"
         "  \"vice_capitano_num\": 4,\n"
@@ -129,7 +199,10 @@ def analizza_distinta(uploaded_file, ruolo_squadra, api_key):
 
     dati["allenatore"] = pulisci_testo(dati.get("allenatore"))
     dati["campionato"] = pulisci_testo(dati.get("campionato"))
-    dati["data"] = pulisci_testo(dati.get("data"))
+    dati["data"] = normalizza_data(dati.get("data"))
+    dati["squadra"] = pulisci_testo(dati.get("squadra"))
+    dati["squadra_casa"] = pulisci_testo(dati.get("squadra_casa"))
+    dati["squadra_ospite"] = pulisci_testo(dati.get("squadra_ospite"))
 
     giocatori_estratti = {}
     for g in dati.get("giocatori") or []:

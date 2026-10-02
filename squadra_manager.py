@@ -69,11 +69,12 @@ def applica_shift(chiave_griglia, direzione):
     st.session_state.pop(f"ed_{chiave_griglia}", None)
 
 
-def render_colonna_squadra(label_titolo, chiave_griglia, default_all):
-    """Rende la colonna squadra; nome società e allenatore sono compilati dall'utente."""
+def render_colonna_squadra(label_titolo, chiave_griglia, default_all, default_nome=""):
+    """Rende la colonna squadra; nome società e allenatore sono precompilati dalla scansione
+    ma restano modificabili dall'utente."""
     st.subheader(label_titolo)
 
-    nome = st.text_input(f"Nome Società {label_titolo}", key=f"n_{chiave_griglia}")
+    nome = st.text_input(f"Nome Società {label_titolo}", value=default_nome, key=f"n_{chiave_griglia}")
     alln = st.text_input(f"Allenatore {label_titolo}", value=default_all, key=f"a_{chiave_griglia}")
 
     st.session_state[chiave_griglia] = st.data_editor(
