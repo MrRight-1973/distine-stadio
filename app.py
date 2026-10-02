@@ -94,7 +94,7 @@ def pubblica_distinta(info_gara, dati_c, dati_o):
             repo=leggi_secret("GITHUB_REPO"),
             file_da_pubblicare=file_da_pubblicare,
             messaggio=f"Distinta {dati_c.get('squadra') or 'casa'} - {dati_o.get('squadra') or 'ospite'}",
-            branch=leggi_secret("GITHUB_BRANCH", "main"),
+            branch=leggi_secret("GITHUB_BRANCH"),  # se assente: ramo principale del repository
         )
     except PubblicazioneErrore as e:
         st.error(f"❌ Pubblicazione online non riuscita: {e}")

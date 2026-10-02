@@ -4,10 +4,11 @@ Tutti i file vengono scritti in UN SOLO commit, così la pagina pubblica non pu�
 mai mostrare un JSON nuovo con un PDF vecchio (o viceversa) e GitHub Pages
 ricostruisce il sito una volta sola.
 
-Il token deve essere un "fine-grained personal access token" limitato al solo
-repository della pagina, con il permesso "Contents: Read and write".
+Il token deve essere un "fine-grained personal access token" con accesso al
+repository della pagina e il permesso "Contents: Read and write".
 """
 import base64
+import re
 
 import requests
 
@@ -18,6 +19,16 @@ class PubblicazioneErrore(Exception):
     """Errore comprensibile da mostrare alla segreteria."""
 
 
+def normalizza_repo(repo):
+    """Accetta 'utente/nome', ma anche un URL copiato dal browser o con '.git' finale."""
+    if not repo:
+        return ""
+    r = str(repo).strip().strip("/")
+    r = re.sub(r"^https?://(www\.)?github\.com/", "", r, flags=re.IGNORECASE)
+    r = re.sub(r"\.git$", "", r)
+    return r.strip("/")
+
+
 def _intestazioni(token):
     return {
         "Authorization": f"Bearer {token}",
@@ -26,22 +37,21 @@ def _intestazioni(token):
     }
 
 
-def _chiama(metodo, url, token, timeout, **kwargs):
+def _chiama(metodo, url, token, timeout, ammetti_404=False, **kwargs):
     try:
         r = requests.request(metodo, url, headers=_intestazioni(token), timeout=timeout, **kwargs)
     except requests.RequestException as e:
         raise PubblicazioneErrore(f"GitHub non raggiungibile: {e}") from e
 
-    if r.status_code in (401, 403):
+    if r.status_code == 401:
+        raise PubblicazioneErrore("GitHub non accetta il token: GITHUB_TOKEN è errato o scaduto.")
+    if r.status_code == 403:
         raise PubblicazioneErrore(
-            "GitHub ha rifiutato il token (GITHUB_TOKEN scaduto, errato o senza il permesso "
-            "'Contents: Read and write' sul repository)."
+            "GitHub ha negato l'operazione: al token manca il permesso 'Contents: Read and write' "
+            "sul repository (oppure è stato superato un limite di richieste)."
         )
-    if r.status_code == 404:
-        raise PubblicazioneErrore(
-            "Repository o ramo non trovato: controlla GITHUB_REPO e GITHUB_BRANCH, e che il token "
-            "abbia accesso a quel repository."
-        )
+    if r.status_code == 404 and not ammetti_404:
+        raise PubblicazioneErrore("Risorsa non trovata su GitHub (HTTP 404).")
     if r.status_code == 409:
         raise PubblicazioneErrore(
             "Il repository è vuoto: carica prima almeno un file (per esempio index.html)."
@@ -49,23 +59,66 @@ def _chiama(metodo, url, token, timeout, **kwargs):
     return r
 
 
-def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch="main",
+def _diagnosi_404(base, repo, branch, token, timeout):
+    """Capisce COSA non è stato trovato e lo dice con precisione."""
+    r = _chiama("GET", base, token, timeout, ammetti_404=True)
+    if r.status_code == 404:
+        return PubblicazioneErrore(
+            f"Repository '{repo}' non trovato. Controlla che GITHUB_REPO sia scritto esattamente come "
+            "'utente/nome-repository' e, soprattutto, che il token abbia accesso a QUESTO repository: "
+            "nelle impostazioni del token (Repository access) deve essere incluso, e il proprietario "
+            "(Resource owner) deve essere l'utente o l'organizzazione che possiede il repository."
+        )
+    if r.status_code == 200:
+        predefinito = r.json().get("default_branch")
+        if predefinito and predefinito != branch:
+            return PubblicazioneErrore(
+                f"Il ramo '{branch}' non esiste, ma il ramo principale del repository si chiama "
+                f"'{predefinito}': imposta GITHUB_BRANCH = \"{predefinito}\" nei secrets "
+                "(oppure toglilo, e verrà usato quello principale)."
+            )
+        return PubblicazioneErrore(
+            f"Il ramo '{branch}' non è stato trovato. Se il repository è appena stato creato, "
+            "carica prima almeno un file (per esempio index.html) con Add file → Upload files."
+        )
+    return PubblicazioneErrore(f"Lettura del repository fallita (HTTP {r.status_code}).")
+
+
+def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch=None,
                        api_base=GITHUB_API, timeout=20):
     """Scrive i file nel repository con un solo commit.
 
     file_da_pubblicare: dict {percorso_nel_repo: contenuto in bytes}
+    branch: se omesso si usa il ramo principale del repository.
     Restituisce lo sha del nuovo commit.
     """
+    repo = normalizza_repo(repo)
+    token = (token or "").strip()
     if not token or not repo:
         raise PubblicazioneErrore("GITHUB_TOKEN o GITHUB_REPO non configurati nei secrets.")
+    if repo.count("/") != 1:
+        raise PubblicazioneErrore(
+            f"GITHUB_REPO ('{repo}') non è nel formato 'utente/nome-repository'."
+        )
     if not file_da_pubblicare:
         raise PubblicazioneErrore("Nessun file da pubblicare.")
 
     base = f"{api_base}/repos/{repo}"
 
+    branch = (branch or "").strip()
+    if not branch:
+        r = _chiama("GET", base, token, timeout, ammetti_404=True)
+        if r.status_code == 404:
+            raise _diagnosi_404(base, repo, "main", token, timeout)
+        if r.status_code != 200:
+            raise PubblicazioneErrore(f"Lettura del repository fallita (HTTP {r.status_code}).")
+        branch = r.json().get("default_branch") or "main"
+
     for tentativo in range(2):  # secondo giro solo se qualcuno ha scritto nel frattempo
         # 1) ultimo commit del ramo
-        r = _chiama("GET", f"{base}/git/ref/heads/{branch}", token, timeout)
+        r = _chiama("GET", f"{base}/git/ref/heads/{branch}", token, timeout, ammetti_404=True)
+        if r.status_code == 404:
+            raise _diagnosi_404(base, repo, branch, token, timeout)
         if r.status_code != 200:
             raise PubblicazioneErrore(f"Lettura del ramo '{branch}' fallita (HTTP {r.status_code}).")
         sha_commit = r.json()["object"]["sha"]
@@ -112,9 +165,12 @@ def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch="main"
 
 def url_pagina_da_repo(repo):
     """URL standard di GitHub Pages per un repository 'utente/nome'."""
+    repo = normalizza_repo(repo)
     try:
         utente, nome = repo.split("/", 1)
-    except (ValueError, AttributeError):
+    except ValueError:
+        return None
+    if not utente or not nome:
         return None
     if nome.lower() == f"{utente.lower()}.github.io":
         return f"https://{utente}.github.io/"
