@@ -9,13 +9,16 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from sponsor_manager import MAX_SPONSOR, distribuisci_righe
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "logo_azzurra.png")
 
-# Cartella con i loghi degli sponsor: basta aggiungere/togliere file (png, jpg).
-# L'ordine nel PDF segue l'ordine alfabetico dei nomi file (01_..., 02_..., ecc.).
+# Gli sponsor arrivano normalmente dal repository della pagina (li gestisce la segreteria
+# dal pannello). Questa cartella locale resta come riserva se GitHub non è raggiungibile
+# o non ha ancora un elenco: basta aggiungere/togliere file (png, jpg), in ordine alfabetico.
 SPONSOR_DIR = os.path.join(BASE_DIR, "sponsor")
-SPONSOR_COLONNE = 5          # loghi per riga
+SPONSOR_COLONNE = 5          # massimo di loghi per riga
 SPONSOR_BOX_W = 100          # dimensione massima del singolo logo (punti)
 SPONSOR_BOX_H = 50
 
@@ -31,18 +34,30 @@ def _elenco_sponsor():
 
 
 def numero_sponsor():
-    """Quanti loghi sponsor verranno stampati nel PDF."""
+    """Quanti loghi ci sono nella cartella locale di riserva."""
     return len(_elenco_sponsor())
 
 
-def _blocco_sponsor(stile_titolo):
-    """Fascia sponsor a griglia; None se non ci sono loghi."""
+def loghi_da_cartella_locale():
+    """Contenuto (bytes) dei loghi nella cartella locale di riserva."""
     loghi = []
     for percorso in _elenco_sponsor():
         try:
-            w, h = ImageReader(percorso).getSize()
+            with open(percorso, "rb") as f:
+                loghi.append(f.read())
+        except OSError:
+            continue
+    return loghi
+
+
+def _blocco_sponsor(stile_titolo, loghi_bytes):
+    """Fascia sponsor a righe equilibrate e centrate; None se non ci sono loghi."""
+    loghi = []
+    for dati in list(loghi_bytes)[:MAX_SPONSOR]:
+        try:
+            w, h = ImageReader(io.BytesIO(dati)).getSize()
             scala = min(SPONSOR_BOX_W / w, SPONSOR_BOX_H / h)
-            loghi.append(RLImage(percorso, width=w * scala, height=h * scala))
+            loghi.append(RLImage(io.BytesIO(dati), width=w * scala, height=h * scala))
         except Exception:
             continue  # un file illeggibile non deve bloccare il PDF
     if not loghi:
@@ -50,10 +65,12 @@ def _blocco_sponsor(stile_titolo):
 
     larghezza_cella = SPONSOR_BOX_W + 6
     altezza_riga = SPONSOR_BOX_H + 8
-    # Una tabella per ogni riga, così l'ultima riga (incompleta) resta centrata
+    # Una tabella per ogni riga, così ogni riga resta centrata e le righe sono equilibrate
     righe_tabelle = []
-    for i in range(0, len(loghi), SPONSOR_COLONNE):
-        gruppo = loghi[i:i + SPONSOR_COLONNE]
+    inizio = 0
+    for quanti in distribuisci_righe(len(loghi), SPONSOR_COLONNE):
+        gruppo = loghi[inizio:inizio + quanti]
+        inizio += quanti
         riga = Table([gruppo], colWidths=[larghezza_cella] * len(gruppo), rowHeights=[altezza_riga])
         riga.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -90,7 +107,8 @@ def _carica_logo(larghezza_target=50.0):
         return None
 
 
-def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
+def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None, sponsor_loghi=None):
+    """sponsor_loghi: lista di loghi (bytes) nell'ordine voluto; None = usa la cartella locale."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
@@ -189,7 +207,9 @@ def genera_pdf(casa, ospite, info_gara, qr_code_bytes=None):
         ]))
         story.append(t_qr_footer)
 
-    sponsor = _blocco_sponsor(qr_text_style)
+    if sponsor_loghi is None:
+        sponsor_loghi = loghi_da_cartella_locale()
+    sponsor = _blocco_sponsor(qr_text_style, sponsor_loghi)
     if sponsor is not None:
         story.append(Spacer(1, 14))
         story.append(sponsor)

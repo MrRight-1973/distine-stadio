@@ -29,17 +29,17 @@ def normalizza_repo(repo):
     return r.strip("/")
 
 
-def _intestazioni(token):
+def _intestazioni(token, accept=None):
     return {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
+        "Accept": accept or "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
 
-def _chiama(metodo, url, token, timeout, ammetti_404=False, **kwargs):
+def _chiama(metodo, url, token, timeout, ammetti_404=False, accept=None, **kwargs):
     try:
-        r = requests.request(metodo, url, headers=_intestazioni(token), timeout=timeout, **kwargs)
+        r = requests.request(metodo, url, headers=_intestazioni(token, accept), timeout=timeout, **kwargs)
     except requests.RequestException as e:
         raise PubblicazioneErrore(f"GitHub non raggiungibile: {e}") from e
 
@@ -88,7 +88,8 @@ def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch=None,
                        api_base=GITHUB_API, timeout=20):
     """Scrive i file nel repository con un solo commit.
 
-    file_da_pubblicare: dict {percorso_nel_repo: contenuto in bytes}
+    file_da_pubblicare: dict {percorso_nel_repo: contenuto in bytes}.
+        Un valore None significa "elimina questo file" (deve esistere nel repository).
     branch: se omesso si usa il ramo principale del repository.
     Restituisce lo sha del nuovo commit.
     """
@@ -131,6 +132,9 @@ def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch=None,
         # 2) un blob per ogni file
         voci = []
         for percorso, contenuto in file_da_pubblicare.items():
+            if contenuto is None:  # eliminazione: nell'albero il file ha sha nullo
+                voci.append({"path": percorso, "mode": "100644", "type": "blob", "sha": None})
+                continue
             r = _chiama(
                 "POST", f"{base}/git/blobs", token, timeout,
                 json={"content": base64.b64encode(contenuto).decode("ascii"), "encoding": "base64"},
@@ -161,6 +165,42 @@ def pubblica_su_github(token, repo, file_da_pubblicare, messaggio, branch=None,
         raise PubblicazioneErrore(f"Aggiornamento del ramo fallito (HTTP {r.status_code}).")
 
     raise PubblicazioneErrore("Pubblicazione non riuscita: riprova tra qualche istante.")
+
+
+def leggi_file(token, repo, percorso, branch=None, api_base=GITHUB_API, timeout=20):
+    """Contenuto (bytes) di un file del repository; None se il file non esiste."""
+    repo = normalizza_repo(repo)
+    if not token or not repo:
+        raise PubblicazioneErrore("GITHUB_TOKEN o GITHUB_REPO non configurati nei secrets.")
+    r = _chiama(
+        "GET", f"{api_base}/repos/{repo}/contents/{percorso}", token.strip(), timeout,
+        ammetti_404=True, accept="application/vnd.github.raw+json",
+        params={"ref": branch} if branch else None,
+    )
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        raise PubblicazioneErrore(f"Lettura di {percorso} fallita (HTTP {r.status_code}).")
+    return r.content
+
+
+def elenca_cartella(token, repo, percorso, branch=None, api_base=GITHUB_API, timeout=20):
+    """Nomi dei file contenuti in una cartella del repository (lista vuota se non esiste)."""
+    repo = normalizza_repo(repo)
+    if not token or not repo:
+        raise PubblicazioneErrore("GITHUB_TOKEN o GITHUB_REPO non configurati nei secrets.")
+    r = _chiama(
+        "GET", f"{api_base}/repos/{repo}/contents/{percorso}", token.strip(), timeout,
+        ammetti_404=True, params={"ref": branch} if branch else None,
+    )
+    if r.status_code == 404:
+        return []
+    if r.status_code != 200:
+        raise PubblicazioneErrore(f"Lettura della cartella {percorso} fallita (HTTP {r.status_code}).")
+    dati = r.json()
+    if not isinstance(dati, list):
+        return []
+    return [voce["name"] for voce in dati if voce.get("type") == "file"]
 
 
 def url_pagina_da_repo(repo):

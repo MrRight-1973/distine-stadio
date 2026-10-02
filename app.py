@@ -18,6 +18,7 @@ from squadra_manager import (
     reset_stato_squadra,
 )
 from ui_components import render_download_buttons, render_info_match
+from ui_sponsor import loghi_per_pdf, render_gestione_sponsor
 
 # Deve essere il PRIMO comando Streamlit
 st.set_page_config(page_title="Segreteria - Distinta Digitale Azzurra", page_icon="⚽", layout="wide")
@@ -71,7 +72,16 @@ def pubblica_distinta(info_gara, dati_c, dati_o):
     link = link_pagina_spettatori()
     qr_bytes = genera_qr_png(link) if link else None
 
-    pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, qr_bytes)
+    loghi, avviso_sponsor = loghi_per_pdf(
+        leggi_secret("GITHUB_TOKEN"), leggi_secret("GITHUB_REPO"), leggi_secret("GITHUB_BRANCH")
+    )
+    if avviso_sponsor:
+        st.warning(avviso_sponsor)
+    n_sponsor = len(loghi) if loghi is not None else numero_sponsor()
+    if n_sponsor == 0:
+        st.info("Il PDF è senza sponsor: caricali dalla sezione 'Gestione Sponsor' in fondo alla pagina.")
+
+    pdf_bytes = genera_pdf(dati_c, dati_o, info_gara, qr_bytes, sponsor_loghi=loghi)
     st.session_state["pdf_interattivo_pronto"] = pdf_bytes  # il PDF resta scaricabile anche se GitHub non risponde
 
     if not link:
@@ -142,13 +152,6 @@ def render_segreteria():
     )
     if not (leggi_secret("GITHUB_TOKEN") and leggi_secret("GITHUB_REPO")):
         st.warning("GITHUB_TOKEN / GITHUB_REPO non configurati nei secrets: la pubblicazione online non è disponibile.")
-
-    if numero_sponsor() == 0:
-        st.warning(
-            "Nessun logo sponsor trovato: il PDF verrà creato senza la fascia sponsor. "
-            "Controlla che nel repository dell'app ci sia la cartella 'sponsor' con i loghi (.png/.jpg), "
-            "accanto ad app.py."
-        )
 
     api_key_openai = leggi_secret("OPENAI_API_KEY")
     if not api_key_openai:
@@ -221,6 +224,11 @@ def render_segreteria():
                 pubblica_distinta(info_gara, dati_c, dati_o)
 
     render_download_buttons()
+
+    st.markdown("---")
+    render_gestione_sponsor(
+        leggi_secret("GITHUB_TOKEN"), leggi_secret("GITHUB_REPO"), leggi_secret("GITHUB_BRANCH")
+    )
 
 
 # --- ROUTING: questa app è solo per la segreteria; gli spettatori usano la pagina su GitHub Pages ---
